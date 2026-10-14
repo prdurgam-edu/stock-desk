@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://your-dashboard-domain"],
+    "method": ["GET", "POST", "PUT", "HEAD"],
+    "responseHeader": ["Content-Type", "Authorization", "x-goog-resumable"],
+    "maxAgeSeconds": 3600
+  }
+]
