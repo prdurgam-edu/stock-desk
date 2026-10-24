@@ -158,9 +158,11 @@ const store = BUCKET ? new GcsStore(BUCKET, PREFIX) : new DiskStore(path.join(HE
 
 function cors(req, res) {
   const o = req.headers.origin;
+  // always, so a photograph cached by an <img> (no Origin) is not reused for a
+  // fetch() that needs the CORS header
+  res.setHeader('Vary', 'Origin');
   if (o && (ORIGINS.includes(o) || ORIGINS.includes('*'))) {
     res.setHeader('Access-Control-Allow-Origin', o);
-    res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding');
     res.setHeader('Access-Control-Max-Age', '3600');
