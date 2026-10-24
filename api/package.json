@@ -1,0 +1,20 @@
+{
+  "name": "stock-desk-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Narsingh Stock Desk: reads design codes off tag photographs and keeps the shop's files and history in Google Cloud Storage.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "8.4.0",
+    "@gutenye/ocr-node": "1.4.9",
+    "onnxruntime-node": "1.30.0",
+    "sharp": "0.34.5"
+  },
+  "type": "module"
+}
