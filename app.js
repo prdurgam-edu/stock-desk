@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-10-24d';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-10-24e';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -154,6 +154,12 @@
         ' more daily file(s) and it switches to real daily movement.';
 
     $('linesQual').textContent = A.basis === 'daily' ? 'daily pace' : 'period pace';
+
+    // days since a sale needs daily files; until then the choice would sort nothing
+    var quiet = $('sortBy').querySelector('option[value="idle"]');
+    var hasIdle = A.lines.some(function (l) { return l.idle != null; });
+    quiet.hidden = quiet.disabled = !hasIdle;
+    if (!hasIdle && filter.sort === 'idle') { filter.sort = 'sold'; filter.dir = -1; $('sortBy').value = 'sold'; }
 
     var sel = $('sellerFilter'), cur = sel.value;
     sel.innerHTML = '<option value="">Every seller</option>' + A.sellers.map(function (s) {
@@ -1264,7 +1270,7 @@
     $('sortBy').addEventListener('change', function () {
       filter.sort = this.value;
       // the two alphabetical choices read forwards; the rest are biggest first
-      filter.dir = (this.value === 'seller' || this.value === 'all') ? 1 : -1;
+      filter.dir = (this.value === 'seller' || this.value === 'all' || this.value === 'ref') ? 1 : -1;
       renderLines();
     });
     // the column headings inside every movement group sort, as before

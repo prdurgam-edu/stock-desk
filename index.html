@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261024d">
+<link rel="stylesheet" href="styles.css?v=20261024e">
 
 <!-- ============================================================
      CONFIGURATION — edit this block only.
@@ -124,14 +124,15 @@ window.NARSINGH_CONFIG = {
       </div>
       <input type="search" id="q" placeholder="Search a design code or seller" aria-label="Search lines">
       <select id="sellerFilter" aria-label="Filter by seller"><option value="">Every seller</option></select>
+      <!-- one question each, no two giving the same order:
+           what sells, where pieces pile up, what will take longest, what has
+           gone quiet, and finding a code. Gone quiet appears with daily files. -->
       <select id="sortBy" aria-label="Sort lines">
-        <option value="sold">Most sold</option>
-        <option value="cover">Longest to clear</option>
-        <option value="idle">Longest since a sale</option>
-        <option value="bal">Most stock on hand</option>
-        <option value="rate">Fastest per day</option>
-        <option value="seller">Seller A to Z</option>
-        <option value="all">All lines, A to Z</option>
+        <option value="sold">Best sellers &middot; most pieces sold</option>
+        <option value="bal">Most stock &middot; most pieces on hand</option>
+        <option value="cover">Slowest to clear &middot; most weeks at its pace</option>
+        <option value="idle">Gone quiet &middot; longest since a sale</option>
+        <option value="ref">Design code A to Z</option>
       </select>
       <button class="iconbtn hidden" id="photoOnly" type="button" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -224,12 +225,12 @@ window.NARSINGH_CONFIG = {
 <!-- bundled, so the page works with no internet beyond your own host.
      ?v= changes with every release, so a browser never pairs this page with an
      older cached script. Bump it whenever app.js, styles.css or the others change. -->
-<script src="vendor/xlsx.full.min.js?v=20261024d"></script>
-<script src="vendor/jszip.min.js?v=20261024d"></script>
-<script src="storage.js?v=20261024d"></script>
-<script src="compute.js?v=20261024d"></script>
-<script src="pieces.js?v=20261024d"></script>
-<script src="matcher.js?v=20261024d"></script>
-<script src="app.js?v=20261024d"></script>
+<script src="vendor/xlsx.full.min.js?v=20261024e"></script>
+<script src="vendor/jszip.min.js?v=20261024e"></script>
+<script src="storage.js?v=20261024e"></script>
+<script src="compute.js?v=20261024e"></script>
+<script src="pieces.js?v=20261024e"></script>
+<script src="matcher.js?v=20261024e"></script>
+<script src="app.js?v=20261024e"></script>
 </body>
 </html>
