@@ -33,8 +33,8 @@ gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
 echo "== Building and deploying $SERVICE (3 to 5 minutes)"
 gcloud run deploy "$SERVICE" --source . --region "$REGION" \
   --allow-unauthenticated --service-account "$SA" \
-  --memory 2Gi --cpu 2 --cpu-boost --concurrency 4 --timeout 300 \
-  --min-instances 0 --max-instances 2 \
+  --memory 2Gi --cpu 2 --cpu-boost --concurrency 8 --timeout 300 \
+  --min-instances 0 --max-instances 6 \
   --set-env-vars "BUCKET=$BUCKET,ALLOWED_ORIGINS=$SITE" --quiet
 
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
