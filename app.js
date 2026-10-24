@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesShown = 0, linesPhoto = 0, moreObs = null, PAGE = 300;
-  var BUILD = '2026-10-19a';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-10-24a';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -831,6 +831,7 @@
     var btn = $('computeBtn');
     btn.disabled = true;
     var total = queue.xlsx.length + queue.photo.length, done = 0, added = 0, skipped = [];
+    var photosBefore = (state.photos || []).length;
     status('Reading files...', 'busy'); progress(0);
 
     var chain = Promise.resolve();
@@ -843,17 +844,24 @@
           if (!sheets.length) { skipped.push(f.name + ' (not an ASR stock report)'); return; }
           // one id for the workbook itself, carried by every sheet taken from it,
           // so removing a file later can rebuild from the workbooks that remain
-          var rawId = uid(), took = 0;
-          sheets.forEach(function (sh) {
+          var rawId = uid();
+          var fresh = sheets.filter(function (sh) {
             var dup = state.files.filter(function (x) {
               return x.kind === sh.kind && x.from === sh.from && x.to === sh.to && x.sheet === sh.sheet;
             })[0];
-            if (dup) { skipped.push(f.name + ' ' + sh.sheet + ' (already loaded)'); return; }
-            Compute.ingest(state, sh, { id: uid(), name: f.name, size: f.size, rawId: rawId });
-            added++; took++;
+            if (dup) skipped.push(f.name + ' ' + sh.sheet + ' (already loaded)');
+            return !dup;
           });
-          if (!took) return;
-          return Store.backend.putRaw(rawId, f.name, f).catch(function () {});
+          if (!fresh.length) return;
+          // the workbook itself is stored first: removing a file later rebuilds
+          // the history from the workbooks kept, so none may be counted unkept
+          status('Storing ' + f.name + '...', 'busy');
+          return Store.backend.putRaw(rawId, f.name, f).then(function () {
+            fresh.forEach(function (sh) {
+              Compute.ingest(state, sh, { id: uid(), name: f.name, size: f.size, rawId: rawId });
+              added++;
+            });
+          });
         }).then(function () { progress(++done / total); });
       });
     });
@@ -877,7 +885,11 @@
       return runMatcher(pending).then(function () { renderPhotos(); renderLines(); });
     }).then(function () {
       progress(null);
-      var msg = added ? 'Computed. ' + added + ' sheet(s) added.' : 'Nothing new to add.';
+      var newPhotos = (state.photos || []).length - photosBefore;
+      var bits = [];
+      if (added) bits.push(added + ' sheet(s)');
+      if (newPhotos > 0) bits.push(newPhotos + ' photograph' + (newPhotos === 1 ? '' : 's'));
+      var msg = bits.length ? 'Computed. ' + bits.join(' and ') + ' added.' : 'Nothing new to add.';
       if (skipped.length) msg += ' Skipped: ' + skipped.join('; ') + '.';
       // a tagged photograph is no use if its line sits past row three hundred
       var lit = A.lines.filter(function (l) { return thumbByDesign[l.key]; }).length;
@@ -886,8 +898,16 @@
       status(msg, skipped.length && !added ? 'err' : 'ok');
     }).catch(function (e) {
       progress(null);
-      status(e.message || String(e), 'err');
+      var msg = e.message || String(e);
+      if (/failed to fetch|networkerror|load failed/i.test(msg))
+        msg = 'Lost the connection to the cloud service. Press Compute again; it carries on from where it stopped.';
       btn.disabled = false;
+      // keep whatever reached the cloud, so the next Compute skips it
+      var kept = (state.photos || []).length;
+      if (!added && kept === photosBefore) { status(msg, 'err'); return; }
+      persistAndDraw().then(function () {
+        status(msg, 'err');
+      }, function () { status(msg, 'err'); });
     });
   }
 
@@ -922,17 +942,39 @@
             if (info && !known.sender) { Object.assign(known, chatFields(info)); known.batchIsSeller = null; }
             return;
           }
-          jobs.push(entry.async('blob').then(function (b) {
+          jobs.push({ entry: entry, base: base, info: info });
+        });
+        // A few at a time, not all at once: a hundred photographs sent together
+        // over a shop connection all crawl, and some give up. Each one is
+        // recorded as soon as it is stored, so if the line drops, pressing
+        // Compute again carries on from where it stopped.
+        var stored = 0;
+        status('Storing photographs from ' + file.name + ': 0 of ' + jobs.length + '...', 'busy');
+        return pool(jobs, 3, function (j) {
+          return j.entry.async('blob').then(function (b) {
             var id = uid();
             return Store.backend.putBlob(id, b).then(function () {
-              state.photos.push(Object.assign({ id: id, name: base, designKey: null,
-                addedAt: new Date().toISOString() }, info ? chatFields(info) : {}));
+              state.photos.push(Object.assign({ id: id, name: j.base, designKey: null,
+                addedAt: new Date().toISOString() }, j.info ? chatFields(j.info) : {}));
+              stored++;
+              status('Storing photographs from ' + file.name + ': ' + stored + ' of ' + jobs.length + '...', 'busy');
             });
-          }));
+          });
         });
-        return Promise.all(jobs);
       });
     });
+  }
+  // run worker over items, at most n at once; stops starting new ones after a failure
+  function pool(items, n, worker) {
+    var next = 0, failed = null;
+    function lane() {
+      if (failed || next >= items.length) return Promise.resolve();
+      var item = items[next++];
+      return worker(item).then(lane, function (e) { failed = failed || e; });
+    }
+    var lanes = [];
+    for (var i = 0; i < Math.min(n, items.length); i++) lanes.push(lane());
+    return Promise.all(lanes).then(function () { if (failed) throw failed; });
   }
   function chatFields(info) {
     return { sentAt: info.sentAt, seq: info.seq, sender: info.sender,

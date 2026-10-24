@@ -206,6 +206,30 @@
       if (!r.ok) throw new Error('The cloud service could not ' + what + ' (' + r.status + ').');
       return r;
     }
+    /* A shop connection drops now and then, and a service that has been asleep
+       takes a few seconds to wake. So every call is tried again, a little later
+       each time, before the page gives up: network failures and the "busy" or
+       "starting" answers (429, 5xx) only. Body is a function, so a retried
+       upload sends its file again from the start. */
+    var WAITS = [1500, 4000, 10000, 20000];
+    function call(url, opts, what) {
+      var attempt = 0;
+      function once() {
+        return fetch(url, opts && opts()).then(function (r) {
+          if ((r.status === 429 || r.status >= 500) && attempt < WAITS.length) throw { retry: true, r: r };
+          return check(r, what);
+        }, function (e) {
+          if (attempt < WAITS.length) throw { retry: true, e: e };
+          throw new Error('Could not reach the cloud service to ' + what +
+                          '. Check the internet connection and press Compute again; nothing stored so far is lost.');
+        }).catch(function (x) {
+          if (!x || !x.retry) throw x;
+          var wait = WAITS[attempt++];
+          return new Promise(function (ok) { setTimeout(ok, wait); }).then(once);
+        });
+      }
+      return once();
+    }
     // the history is a megabyte or two of JSON: squeeze it before sending
     function gz(text) {
       if (!global.CompressionStream) return Promise.resolve({ body: text, enc: null });
@@ -217,8 +241,8 @@
       cloud: true,
       api: base,
       load: function () {
-        return fetch(base + '/api/state', { cache: 'no-store' })
-          .then(function (r) { return check(r, 'load the history').json(); })
+        return call(base + '/api/state', function () { return { cache: 'no-store' }; }, 'load the history')
+          .then(function (r) { return r.json(); })
           .then(function (s) { loaded = true; return s || blankState(); });
       },
       save: function (state) {
@@ -228,30 +252,30 @@
         return gz(JSON.stringify(state)).then(function (z) {
           var h = { 'Content-Type': 'application/json' };
           if (z.enc) h['Content-Encoding'] = z.enc;
-          return fetch(base + '/api/state', { method: 'PUT', headers: h, body: z.body });
-        }).then(function (r) { check(r, 'save the history'); });
+          return call(base + '/api/state', function () { return { method: 'PUT', headers: h, body: z.body }; }, 'save the history');
+        }).then(function () {});
       },
       putBlob: function (id, blob) {
-        return fetch(base + '/api/blob/' + encodeURIComponent(id), {
-          method: 'PUT', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob
-        }).then(function (r) { check(r, 'store a photograph'); });
+        return call(base + '/api/blob/' + encodeURIComponent(id), function () {
+          return { method: 'PUT', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob };
+        }, 'store a photograph').then(function () {});
       },
       // photographs are shown straight from the service; the browser caches them
       getBlobUrl: function (id) {
         return Promise.resolve(base + '/api/blob/' + encodeURIComponent(id));
       },
       putRaw: function (id, name, blob) {
-        return fetch(base + '/api/raw/' + encodeURIComponent(id), {
-          method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: blob
-        }).then(function (r) { check(r, 'store a workbook'); });
+        return call(base + '/api/raw/' + encodeURIComponent(id), function () {
+          return { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: blob };
+        }, 'store a workbook').then(function () {});
       },
       getRaw: function (id) {
         return fetch(base + '/api/raw/' + encodeURIComponent(id))
           .then(function (r) { return r.ok ? r.blob() : null; });
       },
       wipe: function () {
-        return fetch(base + '/api/wipe', { method: 'POST' })
-          .then(function (r) { check(r, 'clear the history'); });
+        return call(base + '/api/wipe', function () { return { method: 'POST' }; }, 'clear the history')
+          .then(function () {});
       }
     };
   }
