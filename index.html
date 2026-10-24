@@ -118,6 +118,10 @@ window.NARSINGH_CONFIG = {
 
     <h2>Lines <span class="qual" id="linesQual"></span></h2>
     <div class="controls">
+      <div class="seg" id="viewSwitch" role="group" aria-label="How to show the lines">
+        <button type="button" data-view="movement" aria-pressed="true">By movement</button>
+        <button type="button" data-view="grid" aria-pressed="false">Photo grid</button>
+      </div>
       <input type="search" id="q" placeholder="Search a design code or seller" aria-label="Search lines">
       <select id="sellerFilter" aria-label="Filter by seller"><option value="">Every seller</option></select>
       <select id="sortBy" aria-label="Sort lines">
@@ -138,21 +142,9 @@ window.NARSINGH_CONFIG = {
       </button>
       <span class="muted" id="lineCount"></span>
     </div>
-    <div class="tablewrap">
-      <table id="linesTable">
-        <thead><tr>
-          <th class="thumbcol" data-k="ref">Saree<span class="arrow">&#8597;</span></th>
-          <th>Last 14 days</th>
-          <th data-k="bal" class="r">On hand<span class="arrow">&#8597;</span></th>
-          <th data-k="sold" class="r">Sold<span class="arrow">&#8597;</span></th>
-          <th data-k="rate" class="r">Per day<span class="arrow">&#8597;</span></th>
-          <th data-k="cover" class="r">Weeks to clear<span class="arrow">&#8597;</span></th>
-          <th data-k="idle" class="r">Days idle<span class="arrow">&#8597;</span></th>
-          <th>Movement</th>
-        </tr></thead>
-        <tbody id="linesBody"></tbody>
-      </table>
-    </div>
+    <!-- By movement: one folding group per movement, each scrolling on its own.
+         Photo grid: the photographed lines as tiles. Built by app.js. -->
+    <div id="linesView"></div>
 
     <h2>Sellers</h2>
     <div class="tablewrap">

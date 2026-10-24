@@ -9,8 +9,8 @@
   var engineNote = false;
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
-  var linesRows = [], linesShown = 0, linesPhoto = 0, moreObs = null, PAGE = 300;
-  var BUILD = '2026-10-24a';   // shown in the footer, so you can tell what is live
+  var linesRows = [], linesPhoto = 0;
+  var BUILD = '2026-10-24b';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -200,17 +200,174 @@
     return rows;
   }
 
+  /* Two ways to look at fourteen thousand lines, chosen above the table:
+     By movement  one folding group each for Fast, Steady, Slow and Dead, with
+                  its totals on the header; open one and it scrolls on its own,
+                  so the rest of the page stays a short scroll away.
+     Photo grid   the photographed lines as tiles, for going through by eye.
+     Search, seller, sort and the tiles above apply to both. */
+  var GROUPS = ['fast', 'steady', 'slow', 'dead', 'soldout'];
+  var view = 'movement', openGroups = {}, groupRows = {}, viewObs = [];
+  var gridRows = [], gridShown = 0;
+  try { if (localStorage.getItem('nsd.linesView') === 'grid') view = 'grid'; } catch (e) {}
+
   function renderLines() {
     var withPhoto = A.lines.filter(function (l) { return thumbByDesign[l.key]; }).length;
     var pb = $('photoOnly');
-    pb.classList.toggle('hidden', !withPhoto);
+    // in the grid every line has a photograph already
+    pb.classList.toggle('hidden', !withPhoto || view === 'grid');
     pb.setAttribute('aria-pressed', String(filter.photo));
     pb.querySelector('.count').textContent = withPhoto;
-    linesRows = visibleLines();
-    linesShown = 0;
     linesPhoto = withPhoto;
-    $('linesBody').innerHTML = '';
-    appendLines();
+    document.querySelectorAll('#viewSwitch button').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.view === view));
+    });
+    viewObs.forEach(function (o) { o.disconnect(); }); viewObs = [];
+    linesRows = visibleLines();
+    if (view === 'grid') renderGrid(); else renderGroups();
+  }
+
+  function groupNote(k) {
+    return k === 'fast' ? 'clears in under ' + A.fastWeeks + ' weeks at its pace'
+      : k === 'steady' ? 'clears in ' + A.fastWeeks + ' to ' + A.slowWeeks + ' weeks'
+      : k === 'slow' ? 'needs more than ' + A.slowWeeks + ' weeks to clear'
+      : k === 'dead' ? 'stock on hand and nothing selling'
+      : 'nothing left on hand';
+  }
+
+  function renderGroups() {
+    var box = $('linesView'), by = {};
+    linesRows.forEach(function (l) { (by[l.status] = by[l.status] || []).push(l); });
+    // a narrow search opens what it found; otherwise groups stay as you left them
+    var narrowed = (filter.q.trim() || filter.seller) && linesRows.length <= 400;
+    groupRows = {};
+    box.innerHTML = GROUPS.filter(function (k) { return by[k] && by[k].length; }).map(function (k) {
+      var rows = by[k], bal = 0, sold = 0, pics = 0;
+      rows.forEach(function (l) { bal += l.bal || 0; sold += l.soldObs || 0; if (thumbByDesign[l.key]) pics++; });
+      groupRows[k] = rows;
+      var open = openGroups[k] || narrowed || filter.status === k;
+      return '<details class="grp ' + k + '" data-g="' + k + '"' + (open ? ' open' : '') + '>' +
+        '<summary><span class="chev" aria-hidden="true"></span>' +
+        '<span class="pill ' + k + '">' + LBL[k] + '</span>' +
+        '<span class="gn num">' + n(rows.length) + ' line' + (rows.length === 1 ? '' : 's') + '</span>' +
+        '<span class="gs">' + n(bal) + ' pieces on hand &middot; ' + n(sold) + ' sold' +
+          (pics ? ' &middot; <b>' + pics + ' with a photograph</b>' : '') + '</span>' +
+        '<span class="gnote">' + groupNote(k) + '</span></summary>' +
+        '<div class="gbody"></div></details>';
+    }).join('') || '<div class="gempty">No lines match the search.</div>';
+
+    box.querySelectorAll('details.grp').forEach(function (d) {
+      if (d.open) fillGroup(d);
+      d.querySelector('summary').addEventListener('click', function () {
+        // the click lands before the toggle; remember what the person chose
+        openGroups[d.dataset.g] = !d.open;
+      });
+      d.addEventListener('toggle', function () { if (d.open && !d.querySelector('table')) fillGroup(d); });
+    });
+    var groupsShown = Object.keys(groupRows).length;
+    $('lineCount').textContent = n(linesRows.length) + ' line' + (linesRows.length === 1 ? '' : 's') +
+      (groupsShown > 1 ? ' in ' + groupsShown + ' groups' : '') +
+      (linesPhoto && !filter.photo ? ' ' + MDASH + ' ' + linesPhoto + ' with a photograph' : '');
+  }
+
+  function sortHead(k, label, cls) {
+    var on = filter.sort === k || (filter.sort === 'all' && k === 'ref');
+    return '<th data-k="' + k + '"' + (cls ? ' class="' + cls + '"' : '') +
+      (on ? ' aria-sort="' + (filter.dir < 0 ? 'descending' : 'ascending') + '"' : '') +
+      '>' + label + '<span class="arrow">&#8597;</span></th>';
+  }
+
+  function fillGroup(d) {
+    d.querySelector('.gbody').innerHTML =
+      '<div class="gscroll"><table class="linestable"><thead><tr>' +
+      sortHead('ref', 'Saree', 'thumbcol') + '<th>Last 14 days</th>' +
+      sortHead('bal', 'On hand', 'r') + sortHead('sold', 'Sold', 'r') + sortHead('rate', 'Per day', 'r') +
+      sortHead('cover', 'Weeks to clear', 'r') + sortHead('idle', 'Days idle', 'r') + '<th>Movement</th>' +
+      '</tr></thead><tbody></tbody></table></div>';
+    d._shown = 0;
+    moreInGroup(d);
+  }
+
+  /* a group of six thousand lines arrives a page at a time, as you scroll
+     inside it, or on the button */
+  function moreInGroup(d) {
+    var rows = groupRows[d.dataset.g] || [], tb = d.querySelector('tbody');
+    var old = tb.querySelector('tr.morerow'); if (old) old.remove();
+    var step = d._shown ? Math.min(d._shown * 2, 1200) : 80;
+    var next = rows.slice(d._shown, d._shown + step);
+    tb.insertAdjacentHTML('beforeend', next.map(lineRow).join(''));
+    d._shown += next.length;
+    var left = rows.length - d._shown;
+    if (left > 0) {
+      tb.insertAdjacentHTML('beforeend', '<tr class="morerow"><td colspan="8" class="morecell">' +
+        '<button type="button" class="iconbtn">Show more <span class="count">' + n(left) + ' left</span></button></td></tr>');
+      var row = tb.querySelector('tr.morerow');
+      row.querySelector('button').addEventListener('click', function () { moreInGroup(d); });
+      if (window.IntersectionObserver) {
+        var o = new IntersectionObserver(function (es) {
+          if (es.some(function (e) { return e.isIntersecting; })) { o.disconnect(); moreInGroup(d); }
+        }, { root: d.querySelector('.gscroll'), rootMargin: '500px' });
+        o.observe(row); viewObs.push(o);
+      }
+    }
+    hydrate(tb);
+  }
+
+  function renderGrid() {
+    var box = $('linesView');
+    gridRows = linesRows.filter(function (l) { return thumbByDesign[l.key]; });
+    gridShown = 0;
+    if (!gridRows.length) {
+      box.innerHTML = '<div class="gempty">' + (linesPhoto
+        ? 'No photographed line matches the search.'
+        : 'No line has a photograph yet. Add the WhatsApp zip above and press Compute.') + '</div>';
+    } else {
+      box.innerHTML = '<div class="pgrid"></div>';
+      moreGrid();
+    }
+    var hidden = linesRows.length - gridRows.length;
+    $('lineCount').textContent = n(gridRows.length) + ' line' + (gridRows.length === 1 ? '' : 's') +
+      ' with a photograph' + (hidden > 0 ? ' ' + MDASH + ' ' + n(hidden) + ' without one are under By movement' : '');
+  }
+
+  function tile(l) {
+    var pid = thumbByDesign[l.key], more = (picsByDesign[l.key] || []).length - 1;
+    var w = wks(l.cover, l.bal);
+    var clear = w === 'never' ? 'never clears at this pace' : w === MDASH ? 'nothing on hand' : w + ' weeks to clear';
+    return '<figure class="ptile ' + l.status + '">' +
+      '<span class="pic"><img data-pid="' + esc(pid) + '" data-big="1" data-design="' + esc(l.key) +
+        '" alt="' + esc(l.ref) + '" loading="lazy">' +
+        (more > 0 ? '<span class="morepics" aria-hidden="true">+' + more + '</span>' : '') + '</span>' +
+      '<figcaption>' +
+        '<span class="top"><span class="ref">' + esc(l.ref) + '</span><span class="pill ' + l.status + '">' + LBL[l.status] + '</span></span>' +
+        '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span>' +
+        '<span class="nums"><b class="num">' + n(l.bal) + '</b> on hand &middot; <b class="num">' + n(l.soldObs) +
+          '</b> sold &middot; ' + n1(l.rate) + '/day</span>' +
+        '<span class="clear">' + clear + (l.idle != null ? ' &middot; ' + l.idle + ' days since a sale' : '') + '</span>' +
+      '</figcaption></figure>';
+  }
+
+  function moreGrid() {
+    var grid = document.querySelector('#linesView .pgrid'); if (!grid) return;
+    var old = document.getElementById('gridMore'); if (old) old.remove();
+    var step = gridShown ? Math.min(gridShown * 2, 480) : 60;
+    var next = gridRows.slice(gridShown, gridShown + step);
+    grid.insertAdjacentHTML('beforeend', next.map(tile).join(''));
+    gridShown += next.length;
+    var left = gridRows.length - gridShown;
+    if (left > 0) {
+      grid.insertAdjacentHTML('afterend', '<div class="gridmore" id="gridMore"><button type="button" class="iconbtn">' +
+        'Show more <span class="count">' + n(left) + ' left</span></button></div>');
+      var m = document.getElementById('gridMore');
+      m.querySelector('button').addEventListener('click', moreGrid);
+      if (window.IntersectionObserver) {
+        var o = new IntersectionObserver(function (es) {
+          if (es.some(function (e) { return e.isIntersecting; })) { o.disconnect(); moreGrid(); }
+        }, { rootMargin: '600px' });
+        o.observe(m); viewObs.push(o);
+      }
+    }
+    hydrate(grid);
   }
 
   function lineRow(l) {
@@ -219,7 +376,7 @@
     // width two columns of text used to take
     var more = pid ? (picsByDesign[l.key] || []).length - 1 : 0;
     return '<tr class="' + l.status + (pid ? ' haspic' : '') + '">' +
-      '<td class="thumb">' + (pid
+      '<td class="thumb' + (pid ? '' : ' nopic') + '">' + (pid
         ? '<span class="pic"><img data-pid="' + esc(pid) + '" data-big="1" data-design="' + esc(l.key) +
           '" alt="' + esc(l.ref) + '">' +
           (more > 0 ? '<span class="morepics" aria-hidden="true">+' + more + '</span>' : '') + '</span>'
@@ -235,50 +392,11 @@
       '<td><span class="pill ' + l.status + '">' + LBL[l.status] + '</span></td></tr>';
   }
 
-  /* Fourteen thousand rows at once would lock the page for seconds, so they
-     arrive a page at a time \u2014 on their own as you reach the end of what is
-     there, or on the button if you would rather not scroll. */
-  function appendLines() {
-    var body = $('linesBody'), old = document.getElementById('moreRow');
-    if (old) old.remove();
-    if (moreObs) { moreObs.disconnect(); moreObs = null; }
-
-    // the first page stays small so the table appears at once; later ones grow,
-    // so reaching the end of fourteen thousand lines is a few scrolls, not fifty
-    var step = linesShown ? Math.min(linesShown * 2, 2400) : PAGE;
-    var next = linesRows.slice(linesShown, linesShown + step);
-    if (next.length) {
-      body.insertAdjacentHTML('beforeend', next.map(lineRow).join(''));
-      linesShown += next.length;
-    }
-
-    var left = linesRows.length - linesShown;
-    if (left > 0) {
-      body.insertAdjacentHTML('beforeend',
-        '<tr id="moreRow"><td colspan="8" class="morecell">' +
-        '<button type="button" class="iconbtn" id="moreBtn">Show more' +
-        ' <span class="count">' + n(left) + ' left</span></button></td></tr>');
-      document.getElementById('moreBtn').addEventListener('click', appendLines);
-      if (window.IntersectionObserver) {
-        moreObs = new IntersectionObserver(function (es) {
-          if (es.some(function (e) { return e.isIntersecting; })) appendLines();
-        }, { rootMargin: '600px' });
-        moreObs.observe(document.getElementById('moreRow'));
-      }
-    }
-
-    $('lineCount').textContent = (left > 0
-      ? 'showing ' + n(linesShown) + ' of ' + n(linesRows.length) + ' lines'
-      : n(linesRows.length) + ' line' + (linesRows.length === 1 ? '' : 's')) +
-      (linesPhoto && !filter.photo ? ' ' + MDASH + ' ' + linesPhoto + ' with a photograph' : '');
-
-    hydrate(body);
-  }
-
   /* fill every <img data-pid> from storage, once per photo */
   function hydrate(root) {
-    root.querySelectorAll('img[data-pid]').forEach(function (img) {
+    root.querySelectorAll('img[data-pid]:not([data-h])').forEach(function (img) {
       var id = img.dataset.pid;
+      img.setAttribute('data-h', '');
       if (photoUrls[id]) { img.src = photoUrls[id]; return; }
       Store.backend.getBlobUrl(id).then(function (u) {
         if (u) { photoUrls[id] = u; img.src = u; }
@@ -1149,15 +1267,23 @@
       filter.dir = (this.value === 'seller' || this.value === 'all') ? 1 : -1;
       renderLines();
     });
-    document.querySelectorAll('#linesTable th[data-k]').forEach(function (th) {
-      th.addEventListener('click', function () {
-        var k = th.dataset.k;
-        filter.dir = (filter.sort === k) ? -filter.dir : -1;
-        filter.sort = k;
-        // keep the chooser honest, but leave it alone for columns it cannot name
-        if ($('sortBy').querySelector('option[value="' + k + '"]')) $('sortBy').value = k;
-        document.querySelectorAll('#linesTable th').forEach(function (o) { o.removeAttribute('aria-sort'); });
-        th.setAttribute('aria-sort', filter.dir < 0 ? 'descending' : 'ascending');
+    // the column headings inside every movement group sort, as before
+    $('linesView').addEventListener('click', function (e) {
+      var th = e.target.closest && e.target.closest('th[data-k]');
+      if (!th) return;
+      var k = th.dataset.k;
+      if (filter.sort === 'all' && k === 'ref') filter.sort = 'ref';
+      filter.dir = (filter.sort === k) ? -filter.dir : (k === 'ref' ? 1 : -1);
+      filter.sort = k;
+      // keep the chooser honest, but leave it alone for columns it cannot name
+      if ($('sortBy').querySelector('option[value="' + k + '"]')) $('sortBy').value = k;
+      renderLines();
+    });
+    document.querySelectorAll('#viewSwitch button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (view === b.dataset.view) return;
+        view = b.dataset.view;
+        try { localStorage.setItem('nsd.linesView', view); } catch (e) {}
         renderLines();
       });
     });
