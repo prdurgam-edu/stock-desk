@@ -386,8 +386,8 @@ const server = http.createServer(async (req, res) => {
       let queued = 0, failed = 0;
       if (TASKS_QUEUE) {
         const base = process.env.SELF_URL || ('https://' + req.headers.host);
-        for (let i = 0; i < todo.length; i += 25) {
-          const res = await Promise.allSettled(todo.slice(i, i + 25).map(id => enqueue(base, id)));
+        for (let i = 0; i < todo.length; i += 60) {
+          const res = await Promise.allSettled(todo.slice(i, i + 60).map(id => enqueue(base, id)));
           res.forEach(r => { if (r.status === 'fulfilled') queued++; else { failed++; console.error(r.reason); } });
         }
       } else {
