@@ -18,7 +18,7 @@ cd "$(dirname "$0")/.."                              # repository root, where th
 echo "== Project $PROJECT, region $REGION"
 gcloud config set project "$PROJECT" --quiet
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com storage.googleapis.com --quiet
+  artifactregistry.googleapis.com storage.googleapis.com cloudtasks.googleapis.com --quiet
 
 echo "== Storage: gs://$BUCKET (private; only the service can read it)"
 if ! gcloud storage buckets describe "gs://$BUCKET" >/dev/null 2>&1; then
@@ -30,12 +30,23 @@ SA="${NUM}-compute@developer.gserviceaccount.com"
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" \
   --member="serviceAccount:$SA" --role=roles/storage.objectAdmin --quiet >/dev/null
 
+echo "== Reading queue: Cloud Tasks calls the service once per photograph, six at a time"
+QUEUE="${QUEUE:-stock-desk-reads}"
+if ! gcloud tasks queues describe "$QUEUE" --location="$REGION" >/dev/null 2>&1; then
+  gcloud tasks queues create "$QUEUE" --location="$REGION" --quiet \
+    --max-concurrent-dispatches=6 --max-dispatches-per-second=5 \
+    --max-attempts=8 --min-backoff=10s --max-backoff=300s
+fi
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:$SA" --role=roles/cloudtasks.enqueuer --condition=None --quiet >/dev/null
+TASKS_QUEUE="projects/$PROJECT/locations/$REGION/queues/$QUEUE"
+
 echo "== Building and deploying $SERVICE (3 to 5 minutes)"
 gcloud run deploy "$SERVICE" --source . --region "$REGION" \
   --allow-unauthenticated --service-account "$SA" \
   --memory 2Gi --cpu 2 --cpu-boost --concurrency 8 --timeout 300 \
   --min-instances 0 --max-instances 6 \
-  --set-env-vars "BUCKET=$BUCKET,ALLOWED_ORIGINS=$SITE" --quiet
+  --set-env-vars "BUCKET=$BUCKET,ALLOWED_ORIGINS=$SITE,TASKS_QUEUE=$TASKS_QUEUE" --quiet
 
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
 echo

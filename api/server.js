@@ -20,6 +20,17 @@
  *   GET  raw/ID  / PUT raw/ID      workbooks exactly as uploaded
  *   POST wipe                      delete everything
  *   GET  selftest                  read a known tag; used after every deploy
+ *   POST process      {ids}       read these photographs in the background
+ *   POST task/read?id=ID          one background read (called by Cloud Tasks)
+ *   GET  reads                    every reading done so far, for the page
+ *
+ * Reading does not need anyone on the page. The page stores the photographs
+ * and asks for them to be read; this service puts one Cloud Tasks task per
+ * photograph on a queue, and Cloud Tasks calls back here for each, several at
+ * once, retrying any that fail. Each result lands in reads/ID.json. The page,
+ * whenever it is next opened, turns those lines into design codes (a moment's
+ * work) and saves them in the history. The history itself is only ever
+ * written by the page, so the two never overwrite each other.
  *
  * There is no sign-in: anyone who knows this service's address can read and
  * change what it keeps. Fine for a demo; ALLOWED_ORIGINS stops other websites
@@ -31,6 +42,9 @@
  *   ALLOWED_ORIGINS  comma-separated sites allowed to call this service
  *                    (default: the GitHub Pages site and localhost)
  *   PORT             set by Cloud Run
+ *   TASKS_QUEUE      projects/P/locations/R/queues/Q for background reading.
+ *                    Unset: photographs are read one by one inside this process
+ *                    (fine on one machine; on Cloud Run, set it).
  */
 import http from 'node:http';
 import zlib from 'node:zlib';
@@ -51,6 +65,7 @@ const ORIGINS = (process.env.ALLOWED_ORIGINS ||
   'https://prdurgam-edu.github.io,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8787,http://127.0.0.1:8787')
   .split(',').map(s => s.trim()).filter(Boolean);
 const MAX_BODY = 30 * 1024 * 1024;
+const TASKS_QUEUE = process.env.TASKS_QUEUE || '';
 
 /* ---------------- the reader ---------------- */
 
@@ -124,10 +139,24 @@ class DiskStore {
       return { body, type };
     } catch { return null; }
   }
-  async put(k, body, type) {
+  async put(k, body, type, meta) {
     await fsp.mkdir(path.dirname(this.p(k)), { recursive: true });
     await fsp.writeFile(this.p(k), body);
     await fsp.writeFile(this.p(k) + '.type', type || 'application/octet-stream');
+    if (meta) await fsp.writeFile(this.p(k) + '.meta', JSON.stringify(meta));
+  }
+  async exists(k) { try { await fsp.access(this.p(k)); return true; } catch { return false; } }
+  async list(prefix) {
+    let names = [];
+    try { names = await fsp.readdir(this.p(prefix)); } catch { return []; }
+    const out = [];
+    for (const n of names) {
+      if (/\.(type|meta)$/.test(n)) continue;
+      let meta = {};
+      try { meta = JSON.parse(await fsp.readFile(this.p(prefix + n) + '.meta', 'utf8')); } catch {}
+      out.push({ name: prefix + n, meta });
+    }
+    return out;
   }
   async wipe() { await fsp.rm(this.dir, { recursive: true, force: true }); }
 }
@@ -145,14 +174,107 @@ class GcsStore {
       return { body, type: meta.contentType || 'application/octet-stream' };
     } catch (e) { if (e.code === 404) return null; throw e; }
   }
-  async put(k, body, type) {
+  async put(k, body, type, meta) {
     const b = await this.ready;
-    await b.file(this.prefix + k).save(body, { contentType: type || 'application/octet-stream', resumable: false });
+    const opts = { contentType: type || 'application/octet-stream', resumable: false };
+    if (meta) opts.metadata = { metadata: meta };
+    await b.file(this.prefix + k).save(body, opts);
+  }
+  async exists(k) { const b = await this.ready; const [e] = await b.file(this.prefix + k).exists(); return e; }
+  // one listing brings every object's own metadata, which is where a reading's
+  // lines are kept, so the page can have all of them without two thousand fetches
+  async list(prefix) {
+    const b = await this.ready;
+    const [files] = await b.getFiles({ prefix: this.prefix + prefix, autoPaginate: true });
+    return files.map(f => ({ name: f.name.slice(this.prefix.length), meta: (f.metadata && f.metadata.metadata) || {} }));
   }
   async wipe() { const b = await this.ready; await b.deleteFiles({ prefix: this.prefix, force: true }); }
 }
 
 const store = BUCKET ? new GcsStore(BUCKET, PREFIX) : new DiskStore(path.join(HERE, 'data'));
+
+/* ---------------- background reading ---------------- */
+
+const readKey = id => 'reads/' + id + '.json';
+
+// one photograph: read it, keep the lines. Throws only for what is worth
+// trying again (the reader itself failing); a photograph that is missing or
+// is not an image is recorded as such and never retried.
+async function readTask(id) {
+  if (await store.exists(readKey(id))) return { already: true };
+  const got = await store.get('photos/' + id);
+  if (!got) return { missing: true };
+  let rec;
+  try {
+    const r = await read(got.body);
+    rec = { lines: r.lines, ms: r.ms, at: new Date().toISOString() };
+  } catch (e) {
+    if (!/unsupported image|Input buffer|corrupt|VipsJpeg|Invalid/i.test(String(e && e.message))) throw e;
+    rec = { lines: [], at: new Date().toISOString(), error: 'This file could not be opened as a photograph.' };
+  }
+  const json = JSON.stringify(rec);
+  // Cloud Storage keeps up to 8 KB of metadata with an object: the lines fit
+  // there almost always, and then one listing returns every reading
+  const meta = json.length < 7000 ? { r: json } : { big: '1' };
+  await store.put(readKey(id), Buffer.from(json), 'application/json', meta);
+  return { read: true, lines: rec.lines.length };
+}
+
+let tokenCache = null;
+async function token() {
+  if (tokenCache && tokenCache.until > Date.now() + 60000) return tokenCache.value;
+  const r = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+                        { headers: { 'Metadata-Flavor': 'Google' } });
+  if (!r.ok) throw new Error('No service account token (' + r.status + ')');
+  const j = await r.json();
+  tokenCache = { value: j.access_token, until: Date.now() + j.expires_in * 1000 };
+  return tokenCache.value;
+}
+
+// one task per photograph. The name keeps a photograph from being queued twice
+// in the same hour if the page asks again.
+async function enqueue(base, id) {
+  const hour = new Date().toISOString().slice(0, 13).replace(/\D/g, '');
+  const name = TASKS_QUEUE + '/tasks/r-' + id.replace(/[^A-Za-z0-9_-]/g, '_') + '-' + hour;
+  const r = await fetch('https://cloudtasks.googleapis.com/v2/' + TASKS_QUEUE + '/tasks', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + await token(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task: { name, dispatchDeadline: '300s', httpRequest: {
+      httpMethod: 'POST', url: base + '/api/task/read?id=' + encodeURIComponent(id) } } })
+  });
+  if (r.status === 409) return 'already';
+  if (!r.ok) throw new Error('Cloud Tasks said ' + r.status + ': ' + (await r.text()).slice(0, 200));
+  return 'queued';
+}
+
+// without a queue (testing on one machine): the same work, in this process
+const localQueue = []; let localBusy = false;
+function localEnqueue(id) {
+  if (!localQueue.includes(id)) localQueue.push(id);
+  if (localBusy) return;
+  localBusy = true;
+  (async () => {
+    while (localQueue.length) {
+      const next = localQueue.shift();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { await readTask(next); break; } catch (e) { console.error('read', next, e.message); }
+      }
+    }
+    localBusy = false;
+  })();
+}
+
+async function allReads() {
+  const list = await store.list('reads/');
+  const out = {};
+  await Promise.all(list.map(async f => {
+    const id = f.name.replace(/^reads\//, '').replace(/\.json$/, '');
+    if (f.meta && f.meta.r) { try { out[id] = JSON.parse(f.meta.r); return; } catch {} }
+    const got = await store.get(f.name);
+    if (got) { try { out[id] = JSON.parse(got.body.toString('utf8')); } catch {} }
+  }));
+  return out;
+}
 
 /* ---------------- HTTP ---------------- */
 
@@ -254,6 +376,40 @@ const server = http.createServer(async (req, res) => {
         await store.put(k, b, req.headers['content-type'] || 'application/octet-stream');
         return send(res, 200, { ok: true });
       }
+    }
+
+    if (route === 'process' && req.method === 'POST') {
+      const j = JSON.parse((await body(req)).toString('utf8') || '{}');
+      const ids = (Array.isArray(j.ids) ? j.ids : []).filter(id => typeof id === 'string' && ID.test(id));
+      const done = new Set(Object.keys(await allReads()));
+      const todo = ids.filter(id => !done.has(id));
+      let queued = 0, failed = 0;
+      if (TASKS_QUEUE) {
+        const base = process.env.SELF_URL || ('https://' + req.headers.host);
+        for (let i = 0; i < todo.length; i += 25) {
+          const res = await Promise.allSettled(todo.slice(i, i + 25).map(id => enqueue(base, id)));
+          res.forEach(r => { if (r.status === 'fulfilled') queued++; else { failed++; console.error(r.reason); } });
+        }
+      } else {
+        todo.forEach(localEnqueue); queued = todo.length;
+      }
+      return send(res, failed && !queued ? 502 : 200,
+        { asked: ids.length, alreadyRead: ids.length - todo.length, queued, failed, background: TASKS_QUEUE ? 'cloud tasks' : 'in process' });
+    }
+
+    if (route === 'task/read' && req.method === 'POST') {
+      const id = url.searchParams.get('id') || '';
+      if (!ID.test(id)) return send(res, 200, { skipped: 'bad id' });   // 200: nothing to retry
+      return send(res, 200, await readTask(id));
+    }
+
+    if (route === 'reads' && req.method === 'GET') {
+      const all = await allReads(), since = url.searchParams.get('since') || '';
+      // only what is newer than the page already has
+      const reads = {};
+      Object.keys(all).forEach(id => { if (!since || (all[id].at || '') >= since) reads[id] = all[id]; });
+      return sendJsonGz(req, res, Buffer.from(JSON.stringify({ reads, count: Object.keys(all).length,
+        waitingLocally: localQueue.length })));
     }
 
     if (route === 'wipe' && req.method === 'POST') {

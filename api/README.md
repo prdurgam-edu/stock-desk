@@ -46,10 +46,22 @@ stay.
 | `BUCKET` | set by `deploy.sh` | Unset, files go to `./data` — for testing on a laptop |
 | `PREFIX` | `stock/` | Folder inside the bucket |
 | `ALLOWED_ORIGINS` | the GitHub Pages site | Comma-separated sites allowed to call the service |
+| `TASKS_QUEUE` | set by `deploy.sh` | The Cloud Tasks queue reads go through. Unset, photographs are read one by one inside the process — for a laptop |
 
-`deploy.sh` caps the service at two instances and lets it sleep when unused,
+`deploy.sh` caps the service at six instances and lets it sleep when unused,
 so it costs nothing while idle. The first request after a sleep takes a few
 seconds longer while it wakes; the page says so.
+
+### Background reading
+
+The page stores the photographs and posts their ids to `/api/process`. The
+service creates one Cloud Tasks task per photograph (queue `stock-desk-reads`,
+six at a time, up to eight attempts with backoff); each task calls
+`/api/task/read?id=`, which reads the tag and writes `reads/<id>.json`, with
+the lines also in the object's metadata so `/api/reads` gets every reading
+from one listing. No browser needs to be open. The history (`state.json`) is
+written only by the page, which applies the readings when it next opens, so
+the two never overwrite each other.
 
 ## Endpoints
 
@@ -63,6 +75,9 @@ seconds longer while it wakes; the page says so.
 | `GET`, `PUT /api/raw/:id` | Workbooks as uploaded |
 | `POST /api/wipe` | Deletes everything |
 | `GET /api/selftest` | Reads a made-up tag (`selftest.jpg`) and checks the result |
+| `POST /api/process` | Body `{ ids }`: queue these photographs for reading |
+| `POST /api/task/read?id=` | One background read; Cloud Tasks calls this |
+| `GET /api/reads?since=` | Every reading so far (or newer than `since`) |
 
 ## Run it on a laptop
 
