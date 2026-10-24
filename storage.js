@@ -1,10 +1,13 @@
 /* storage.js — where the history lives.
  *
- * Two interchangeable backends behind one interface:
- *   local  — IndexedDB in this browser. Works with no setup at all.
- *   gcs    — Google Cloud Storage, so every machine sees the same history.
+ * Three interchangeable backends behind one interface:
+ *   service — the shop's own cloud service (NARSINGH_CONFIG.api), which keeps
+ *             everything in Google Cloud Storage. No sign-in: the service
+ *             holds the storage permission, the page only talks to it.
+ *   gcs     — Cloud Storage directly, with a Google sign-in in the page.
+ *   local   — IndexedDB in this browser. Works with no setup at all.
  *
- * Which one runs is decided by NARSINGH_CONFIG.gcsBucket being filled in.
+ * The first one configured wins: api, then gcsBucket, else local.
  * Both expose: load(), save(state), putBlob(id, blob), getBlobUrl(id),
  *              putRaw(id, name, blob), getRaw(id, name), wipe(), label.
  */
@@ -196,7 +199,66 @@
     };
   }
 
-  var backend = (CFG.gcsBucket && CFG.googleClientId)
+  /* ---------------- the shop's cloud service ---------------- */
+  function ServiceBackend(base) {
+    var loaded = false;
+    function check(r, what) {
+      if (!r.ok) throw new Error('The cloud service could not ' + what + ' (' + r.status + ').');
+      return r;
+    }
+    // the history is a megabyte or two of JSON: squeeze it before sending
+    function gz(text) {
+      if (!global.CompressionStream) return Promise.resolve({ body: text, enc: null });
+      var stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+      return new Response(stream).blob().then(function (b) { return { body: b, enc: 'gzip' }; });
+    }
+    return {
+      label: 'Google Cloud',
+      cloud: true,
+      api: base,
+      load: function () {
+        return fetch(base + '/api/state', { cache: 'no-store' })
+          .then(function (r) { return check(r, 'load the history').json(); })
+          .then(function (s) { loaded = true; return s || blankState(); });
+      },
+      save: function (state) {
+        // never write over the cloud copy unless it was read first: a page that
+        // could not reach the service starts blank, and must not save that blank
+        if (!loaded) return Promise.reject(new Error('Not saved: the cloud history was never loaded. Reload the page.'));
+        return gz(JSON.stringify(state)).then(function (z) {
+          var h = { 'Content-Type': 'application/json' };
+          if (z.enc) h['Content-Encoding'] = z.enc;
+          return fetch(base + '/api/state', { method: 'PUT', headers: h, body: z.body });
+        }).then(function (r) { check(r, 'save the history'); });
+      },
+      putBlob: function (id, blob) {
+        return fetch(base + '/api/blob/' + encodeURIComponent(id), {
+          method: 'PUT', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob
+        }).then(function (r) { check(r, 'store a photograph'); });
+      },
+      // photographs are shown straight from the service; the browser caches them
+      getBlobUrl: function (id) {
+        return Promise.resolve(base + '/api/blob/' + encodeURIComponent(id));
+      },
+      putRaw: function (id, name, blob) {
+        return fetch(base + '/api/raw/' + encodeURIComponent(id), {
+          method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: blob
+        }).then(function (r) { check(r, 'store a workbook'); });
+      },
+      getRaw: function (id) {
+        return fetch(base + '/api/raw/' + encodeURIComponent(id))
+          .then(function (r) { return r.ok ? r.blob() : null; });
+      },
+      wipe: function () {
+        return fetch(base + '/api/wipe', { method: 'POST' })
+          .then(function (r) { check(r, 'clear the history'); });
+      }
+    };
+  }
+
+  var API = String(CFG.api || '').replace(/\/+$/, '');
+  var backend = API ? ServiceBackend(API)
+    : (CFG.gcsBucket && CFG.googleClientId)
     ? GcsBackend(CFG.gcsBucket, CFG.gcsPrefix || '', CFG.googleClientId)
     : LocalBackend;
 

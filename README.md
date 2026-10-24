@@ -21,6 +21,30 @@ depends on Claude or on any service other than the one you host it on.
 
 ---
 
+## In the cloud, or in the browser
+
+The page works two ways, chosen by one line in `index.html`:
+
+```js
+api: "https://stock-desk-api-….a.run.app",   // set: the cloud does the work
+api: "",                                      // empty: everything in this browser
+```
+
+**With `api` set**, tags are read by the shop's cloud service (`api/`, on Cloud
+Run) in about a second each, and every photograph, every workbook and the
+history are kept in Google Cloud Storage, so any computer that opens the page
+sees the same dashboard. No sign-in. The workbook calculations and the linking
+of stack shots still run in the page — they take a second or two and need no
+server. If the service can't be reached, the page says so and saves nothing
+until it answers, so a bad connection can never overwrite the history; tag
+reading falls back to the in-browser reader.
+
+**With `api` empty**, it runs entirely in the browser as described below.
+
+`api/README.md` has the one-command deploy.
+
+---
+
 ## Running it
 
 Any static web host works. The whole thing is six files plus `vendor/` and `ocr/`.

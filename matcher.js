@@ -26,6 +26,12 @@
   var BASE = (CFG.path || 'ocr/').replace(/\/*$/, '/');
   var COLUMN = ((global.NARSINGH_CONFIG || {}).tagMatcher || {}).column || 'C. REF';
   var ENGINE = 'PaddleOCR PP-OCRv4, reading in this browser';
+  // with the shop's cloud service configured, tags are read there instead:
+  // the same models, natively, about three times faster, and nothing for the
+  // shop computer to download. The in-browser reader stays as the fallback.
+  var API = String((global.NARSINGH_CONFIG || {}).api || '').replace(/\/+$/, '');
+  var CLOUD = 'PaddleOCR PP-OCRv4, reading in Google Cloud';
+  var cloudDown = false;     // after a network failure, read locally for the rest of the batch
 
   var STATUS = { MATCH: 'match', CHECK: 'check', AMBIGUOUS: 'ambiguous', NOMATCH: 'nomatch', ERROR: 'error' };
 
@@ -271,6 +277,9 @@
     var ix = index(validCodes), barcode = null, seen = {}, all = [], raw = [], anyText = 0;
 
     lines.forEach(function (line) {
+      // the "SINCE 1964" heading never holds the design code, and a misread
+      // year ("1064") can happen to be one
+      if (/SINCE/i.test(line)) { anyText++; return; }
       var pieces = String(line).split(/[\s,;|]+/);
       pieces.push(line);                                  // the line as one piece too
       pieces.forEach(function (piece) {
@@ -350,28 +359,76 @@
     return m;
   }
 
+  /* ---------------- reading in the cloud ---------------- */
+  function cloudLines(url, init) {
+    return fetch(url, init).then(function (r) {
+      if (!r.ok) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          var e = new Error(j.error || ('The cloud reader answered ' + r.status + '.'));
+          e.http = r.status; throw e;
+        });
+      }
+      return r.json();
+    }).then(function (j) { return j.lines || []; });
+  }
+  // the photograph already sits in the service's storage: read it there,
+  // rather than downloading it here only to send it back
+  function readCloudById(id) {
+    return cloudLines(API + '/api/read?id=' + encodeURIComponent(id), { method: 'POST' });
+  }
+  function readCloud(blob) {
+    return cloudLines(API + '/api/read', { method: 'POST', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+  }
+  // a network failure (not a refusal) falls back to this browser
+  function useLocal(e) {
+    if (e && e.http) throw e;
+    cloudDown = true;
+    if (onLoad) onLoad('The cloud reader is not answering, so tags are being read in this browser instead.');
+    return null;
+  }
+
   function matchOne(blob, filename, validCodes) {
-    if (engineErr) {
+    if (engineErr && !API) {
       return Promise.resolve({ status: STATUS.ERROR, code: null, message: friendly(engineErr) });
     }
-    return readTag(blob)
-      .then(function (lines) { return pickCode(lines, validCodes); })
+    var lines = API && !cloudDown
+      ? readCloud(blob).catch(function (e) { useLocal(e); return readTag(blob); })
+      : readTag(blob);
+    return lines
+      .then(function (ls) { return pickCode(ls, validCodes); })
       .catch(function (e) {
         return { status: STATUS.ERROR, code: null, message: friendly(e) };
       });
   }
 
-  /* One photograph at a time: the models are already in memory and the work is
-     all CPU, so running several at once only makes each one slower. */
+  /* One photograph at a time: the work is all CPU, wherever it runs, so
+     sending several at once only makes each one slower. */
   function matchMany(photos, getBlob, validCodes, onEach) {
     var out = [];
+    cloudDown = false;
     onLoad = function (m) { if (onEach) onEach(0, photos.length, null, { loading: m }); };
+    var cloudStore = !!(API && global.Store && Store.backend && Store.backend.api === API);
     return photos.reduce(function (chain, p, i) {
       return chain.then(function () {
-        return getBlob(p.id).then(function (blob) {
-          if (!blob) return { status: STATUS.ERROR, code: null, message: 'Photograph could not be read back.' };
-          return matchOne(blob, p.name, validCodes);
-        }).then(function (res) {
+        var job;
+        if (cloudStore && !cloudDown) {
+          job = readCloudById(p.id)
+            .then(function (ls) { return pickCode(ls, validCodes); })
+            .catch(function (e) {
+              useLocal(e);
+              return getBlob(p.id).then(function (blob) {
+                return blob ? matchOne(blob, p.name, validCodes)
+                            : { status: STATUS.ERROR, code: null, message: 'Photograph could not be read back.' };
+              });
+            })
+            .catch(function (e) { return { status: STATUS.ERROR, code: null, message: friendly(e) }; });
+        } else {
+          job = getBlob(p.id).then(function (blob) {
+            if (!blob) return { status: STATUS.ERROR, code: null, message: 'Photograph could not be read back.' };
+            return matchOne(blob, p.name, validCodes);
+          });
+        }
+        return job.then(function (res) {
           out.push({ photo: p, result: res });
           if (onEach) onEach(i + 1, photos.length, p, res);
         });
@@ -380,6 +437,16 @@
   }
 
   function ping() {
+    if (API) {
+      // also wakes the service, which sleeps when nobody is using it
+      return fetch(API + '/api/ping', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { return { ok: true, engine: j.engine || CLOUD, gemini: false }; })
+        .catch(function () {
+          return { ok: false, engine: 'the cloud reader is not answering yet ' + String.fromCharCode(8212) +
+                   ' it sleeps when unused and takes a few seconds to wake', gemini: false };
+        });
+    }
     // a cheap check that the ocr/ folder actually reached the host
     return fetch(BASE + 'models/ppocr_keys_v1.txt', { method: 'HEAD', cache: 'no-store' })
       .then(function (r) {
@@ -393,7 +460,7 @@
 
   global.Matcher = {
     matchOne: matchOne, matchMany: matchMany, ping: ping, pickCode: pickCode, readTag: readTag,
-    STATUS: STATUS, configured: true, url: null, column: COLUMN, engine: ENGINE,
+    STATUS: STATUS, configured: true, url: API || null, column: COLUMN, engine: API ? CLOUD : ENGINE,
     forgetBook: function () {},
     retry: function () { engineErr = null; }
   };

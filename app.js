@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesShown = 0, linesPhoto = 0, moreObs = null, PAGE = 300;
-  var BUILD = '2026-10-14d';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-10-19a';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -628,7 +628,7 @@
             !(p.rejected || []).some(function (k) { return k === res.code; })) {
           p.designKey = res.code; p.source = 'ocr'; p.how = 'read';
         }
-      }, getBook).then(function () {
+      }).then(function () {
         $('matchProg').textContent = '';
         byBarcode();
         linkPieces();
@@ -661,12 +661,6 @@
       p.message = 'Code ' + p.designKey + ' \u2014 same barcode (' + p.barcode +
                   ') as another photograph of this piece.';
     }
-  }
-  function getBook() {
-    if (!state.bookFile) return null;
-    return getBlobFor('bookfile').then(function (blob) {
-      return blob ? { blob: blob, name: state.bookFile.name } : null;
-    });
   }
   function getBlobFor(id) {
     return Store.backend.getBlobUrl(id).then(function (u) {
@@ -847,10 +841,6 @@
         return readFile(f).then(function (buf) {
           var sheets = Compute.parseWorkbook(new Uint8Array(buf), f.name);
           if (!sheets.length) { skipped.push(f.name + ' (not an ASR stock report)'); return; }
-          if (sheets.some(function (sh) { return sh.kind === 'master'; })) {
-            state.bookFile = { name: f.name, at: new Date().toISOString() };
-            Store.backend.putBlob('bookfile', f).catch(function () {});
-          }
           // one id for the workbook itself, carried by every sheet taken from it,
           // so removing a file later can rebuild from the workbooks that remain
           var rawId = uid(), took = 0;
@@ -1169,7 +1159,14 @@
     }).catch(function (e) {
       state = Store.blankState();
       renderFiles(); render();
-      status('Could not reach storage: ' + (e.message || e) + ' Working in this browser for now.', 'err');
+      if (Store.isCloud) {
+        // nothing can be added without the history it would be added to
+        $('computeBtn').disabled = true;
+        status('Could not reach the cloud service (' + (e.message || e) + '). It may still be waking up ' + MDASH +
+               ' reload the page in a few seconds. Nothing is saved until it answers.', 'err');
+      } else {
+        status('Could not reach storage: ' + (e.message || e) + ' Working in this browser for now.', 'err');
+      }
     });
   }
 

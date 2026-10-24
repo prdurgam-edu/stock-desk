@@ -1,0 +1,19 @@
+# Only what the Docker build needs is sent to Cloud Build.
+.git
+.gitignore
+vendor/
+ocr/ort/
+ocr/ocr.bundle.js.part1
+ocr/ocr.bundle.js.part2
+*.html
+*.css
+app.js
+compute.js
+matcher.js
+pieces.js
+storage.js
+README.md
+THIRD_PARTY_NOTICES.md
+cors.json
+api/node_modules/
+api/data/

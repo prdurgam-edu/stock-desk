@@ -26,9 +26,15 @@ window.NARSINGH_CONFIG = {
   slowAfterWeeks: 26,            // a line is Slow when its stock needs longer than this to clear
   fastUnderWeeks: 8,
 
-  // Automatic design-code tagging. PaddleOCR's PP-OCRv4 models run inside this
-  // browser — no server, no API key, nothing leaves the machine. Keep the ocr/
-  // folder next to this file.
+  // The shop's cloud service (api/ in this repository, deployed to Cloud Run).
+  // Set: tags are read in Google Cloud and every file and the history are kept
+  // there, so any computer opening this page sees the same dashboard.
+  // Empty: everything happens in this browser, as before.
+  api: "",
+
+  // Reading tags in the browser: PaddleOCR's PP-OCRv4 models, used when api is
+  // empty, or if the cloud service cannot be reached. Keep the ocr/ folder
+  // next to this file.
   ocr: {
     path: "ocr/"                 // where ocr.bundle.js, models/ and ort/ live
   },
