@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-10-24h';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-10-24i';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -862,10 +862,12 @@
     var ids = todo.map(function (p) { return p.id; });
     var sent = 0, chain = Promise.resolve();
     // a few hundred at a time, so a big zip is never one enormous request
-    for (var i = 0; i < ids.length; i += 300) (function (part) {
-      chain = chain.then(function () { return Store.backend.process(part); })
-        .then(function (r) { sent += (r.queued || 0) + (r.alreadyRead || 0); });
-    })(ids.slice(i, i + 300));
+    for (var i = 0; i < ids.length; i += 300) (function (part, from) {
+      chain = chain.then(function () {
+        if (ids.length > 300) status('Handing tags to the cloud: ' + n(from) + ' of ' + n(ids.length) + '...', 'busy');
+        return Store.backend.process(part);
+      }).then(function (r) { sent += (r.queued || 0) + (r.alreadyRead || 0); });
+    })(ids.slice(i, i + 300), i);
     return chain.then(function () {
       todo.forEach(function (p) {
         p.queuedAt = now;
