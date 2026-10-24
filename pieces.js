@@ -189,7 +189,8 @@
   /* The reader's own verdict, kept apart so that linking can be redone from
      scratch without the reader's opinion and the linker's being confused. */
   function readerVerdict(p) {
-    if (!p.ocr) p.ocr = { status: p.status || 'nomatch', message: p.message || null,
+    if (!p.ocr) p.ocr = { status: p.status || 'nomatch',
+                          message: p.message || (p.status ? null : 'Not read yet. Press Read codes again.'),
                           candidates: p.candidates || null, conf: p.conf == null ? null : p.conf };
     return p.ocr;
   }

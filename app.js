@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-10-24f';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-10-24g';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -640,7 +640,12 @@
     Matcher.retry();
     $('autoProg').textContent = 'Reading ' + unread.length + ' tag(s) again...';
     status('Reading ' + unread.length + ' tag(s) again...', 'busy');
-    return runMatcher(unread).then(done);
+    return runMatcher(unread).then(done, function (e) {
+      renderPhotos(); renderLines();
+      status(e.message || String(e), 'err');
+      $('autoProg').textContent = '';
+      $('refreshAuto').disabled = false;
+    });
   }
 
   function assign(id, code) {
@@ -743,12 +748,33 @@
   /* ---------------- automatic tagging ---------------- */
   function runMatcher(photos) {
     if (!Matcher.configured || !photos.length) return Promise.resolve();
-    $('matchProg').textContent = 'Reading 0 of ' + photos.length + '...';
+    // the photographs that have never been read go first, then the ones read
+    // before without a result
+    photos = photos.slice().sort(function (a, b) { return (a.status ? 1 : 0) - (b.status ? 1 : 0); });
+    var t0 = Date.now(), lastSave = Date.now(), sinceSave = 0, saving = null;
+    function progressText(i, total) {
+      var txt = 'Reading ' + n(i) + ' of ' + n(total);
+      if (i >= 8 && i < total) {
+        var mins = Math.round((Date.now() - t0) / i * (total - i) / 60000);
+        txt += mins >= 1 ? ', about ' + mins + ' minute' + (mins === 1 ? '' : 's') + ' left' : ', under a minute left';
+      }
+      return txt + '...';
+    }
+    $('matchProg').textContent = progressText(0, photos.length);
     return Matcher.matchMany(photos, getBlobFor, validCodes,
       function (i, total, p, res) {
         // the reader reports its own first-time load through the same callback
-        if (!p) { $('matchProg').textContent = res.loading || ''; status(res.loading || '', 'busy'); return; }
-        $('matchProg').textContent = 'Reading ' + i + ' of ' + total + '...';
+        if (!p) {
+          if (res.unread) { $('matchProg').textContent = progressText(i, total); return; }
+          $('matchProg').textContent = res.loading || ''; status(res.loading || '', 'busy'); return;
+        }
+        $('matchProg').textContent = progressText(i, total);
+        if (i > 1 && total > 20) status('Reading design codes off the tags: ' + progressText(i, total).toLowerCase(), 'busy');
+        // a long batch is saved as it goes, so closing the page loses minutes, not the lot
+        if (++sinceSave >= 40 || Date.now() - lastSave > 60000) {
+          sinceSave = 0; lastSave = Date.now();
+          if (!saving) saving = Store.backend.save(state).catch(function () {}).then(function () { saving = null; });
+        }
         p.status = res.status;
         p.barcode = res.barcode || null;   // reliable, and useful the day a barcode-to-design list exists
         p.message = res.message || null;
@@ -761,11 +787,12 @@
             !(p.rejected || []).some(function (k) { return k === res.code; })) {
           p.designKey = res.code; p.source = 'ocr'; p.how = 'read';
         }
-      }).then(function () {
-        $('matchProg').textContent = '';
+      }).then(function (out) {
+        $('matchProg').textContent = out && out.stopped ? out.unread + ' not read yet.' : '';
         byBarcode();
         linkPieces();
-        return Store.backend.save(state);
+        return (saving || Promise.resolve()).then(function () { return Store.backend.save(state); })
+          .then(function () { if (out && out.stopped) throw new Error(out.stopped); });
       });
   }
 
@@ -1216,6 +1243,10 @@
         var left = (state.photos || []).filter(isPending).length;
         status(left ? left + ' photograph(s) still need a code by hand.' : 'Every photograph now has a code.',
                left ? 'err' : 'ok');
+        $('rematchBtn').disabled = false;
+      }, function (e) {
+        renderPhotos(); renderLines();
+        status(e.message || String(e), 'err');
         $('rematchBtn').disabled = false;
       });
     });

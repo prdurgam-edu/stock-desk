@@ -401,39 +401,84 @@
       });
   }
 
-  /* One photograph at a time: the work is all CPU, wherever it runs, so
-     sending several at once only makes each one slower. */
+  /* In the cloud, several photographs are read at once: the service runs a
+     copy of the reader on each of several machines, and one at a time left
+     all but one idle. Each read is tried again, a little later each time, if
+     the line drops or the service is still waking; a photograph that still
+     cannot be read is left undecided rather than marked as a failure, and if
+     several in a row cannot be read the batch stops, so a dropped connection
+     costs a pause and a press of Read codes again, never two thousand errors.
+     In the browser, one at a time: there it is all this computer's CPU. */
+  var LANES = 6, WAITS = [2000, 5000, 12000, 25000], GIVE_UP_AFTER = 3;
+  function readWithRetry(id) {
+    var attempt = 0;
+    function once() {
+      return readCloudById(id).catch(function (e) {
+        // a photograph the service cannot open will not open on a second try
+        var again = !e.http || e.http === 429 || e.http >= 500;
+        if (!again || attempt >= WAITS.length) throw e;
+        var wait = WAITS[attempt++];
+        return new Promise(function (ok) { setTimeout(ok, wait); }).then(once);
+      });
+    }
+    return once();
+  }
+
   function matchMany(photos, getBlob, validCodes, onEach) {
     var out = [];
     cloudDown = false;
     onLoad = function (m) { if (onEach) onEach(0, photos.length, null, { loading: m }); };
     var cloudStore = !!(API && global.Store && Store.backend && Store.backend.api === API);
-    return photos.reduce(function (chain, p, i) {
-      return chain.then(function () {
-        var job;
-        if (cloudStore && !cloudDown) {
-          job = readCloudById(p.id)
-            .then(function (ls) { return pickCode(ls, validCodes); })
-            .catch(function (e) {
-              useLocal(e);
-              return getBlob(p.id).then(function (blob) {
-                return blob ? matchOne(blob, p.name, validCodes)
-                            : { status: STATUS.ERROR, code: null, message: 'Photograph could not be read back.' };
-              });
-            })
-            .catch(function (e) { return { status: STATUS.ERROR, code: null, message: friendly(e) }; });
-        } else {
-          job = getBlob(p.id).then(function (blob) {
+
+    if (!cloudStore) {
+      return photos.reduce(function (chain, p, i) {
+        return chain.then(function () {
+          return getBlob(p.id).then(function (blob) {
             if (!blob) return { status: STATUS.ERROR, code: null, message: 'Photograph could not be read back.' };
             return matchOne(blob, p.name, validCodes);
+          }).then(function (res) {
+            out.push({ photo: p, result: res });
+            if (onEach) onEach(i + 1, photos.length, p, res);
           });
-        }
-        return job.then(function (res) {
-          out.push({ photo: p, result: res });
-          if (onEach) onEach(i + 1, photos.length, p, res);
         });
+      }, Promise.resolve()).then(function () { onLoad = null; return out; });
+    }
+
+    var next = 0, done = 0, failedInRow = 0, stopped = null;
+    function lane() {
+      if (stopped || next >= photos.length) return Promise.resolve();
+      var p = photos[next++];
+      return readWithRetry(p.id).then(function (ls) {
+        failedInRow = 0;
+        return pickCode(ls, validCodes);
+      }, function (e) {
+        if (e && e.http && e.http < 500 && e.http !== 429) {
+          // the service answered, and the answer was no: this photograph only
+          failedInRow = 0;
+          return { status: STATUS.ERROR, code: null, message: friendly(e) };
+        }
+        if (++failedInRow >= GIVE_UP_AFTER && !stopped) {
+          stopped = 'Lost the connection to the cloud reader. ' +
+                    'Press Read codes again to carry on from where it stopped.';
+        }
+        return null;          // not read: stays undecided, read again next time
+      }).then(function (res) {
+        done++;
+        if (res) {
+          out.push({ photo: p, result: res });
+          if (onEach) onEach(done, photos.length, p, res);
+        } else if (onEach) onEach(done, photos.length, null, { unread: true });
+        return lane();
       });
-    }, Promise.resolve()).then(function () { onLoad = null; return out; });
+    }
+    var lanes = [];
+    for (var i = 0; i < Math.min(LANES, photos.length); i++) lanes.push(lane());
+    return Promise.all(lanes).then(function () {
+      onLoad = null;
+      out.stopped = stopped;
+      out.unread = photos.length - out.length;
+      return out;
+    });
   }
 
   function ping() {
