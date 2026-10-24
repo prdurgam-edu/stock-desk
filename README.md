@@ -30,14 +30,21 @@ api: "https://stock-desk-api-….a.run.app",   // set: the cloud does the work
 api: "",                                      // empty: everything in this browser
 ```
 
-**With `api` set**, tags are read by the shop's cloud service (`api/`, on Cloud
-Run) in about a second each, and every photograph, every workbook and the
-history are kept in Google Cloud Storage, so any computer that opens the page
-sees the same dashboard. No sign-in. The workbook calculations and the linking
-of stack shots still run in the page — they take a second or two and need no
-server. If the service can't be reached, the page says so and saves nothing
-until it answers, so a bad connection can never overwrite the history; tag
-reading falls back to the in-browser reader.
+**With `api` set**, every photograph, every workbook and the history are kept
+in Google Cloud Storage, so any computer that opens the page sees the same
+dashboard. No sign-in.
+
+Tags are read in the cloud **without anyone on the page**. Upload the zip,
+press Compute, and close the page if you like: the service puts one read per
+photograph on a Cloud Tasks queue and works through them six at a time,
+retrying any that fail. The next time anyone opens the page, it turns what was
+read into design codes against the workbook (a second or two) and saves them.
+While the page is open it shows the reading as it happens.
+
+The workbook calculations and the linking of stack shots run in the page —
+they take a second or two and need no server. If the service can't be reached,
+the page says so and saves nothing until it answers, so a bad connection can
+never overwrite the history.
 
 **With `api` empty**, it runs entirely in the browser as described below.
 

@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-10-24g';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-10-24h';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -638,6 +638,15 @@
     if (!Matcher.configured || !unread.length) return done();
 
     Matcher.retry();
+    if (cloudReading) {
+      return fetchReads().then(function () {
+        applyReads(true);
+        return sendForReading(unread.filter(function (p) { return !readsCache[p.id] && isPending(p); }));
+      }).then(done, function (e) {
+        status(e.message || String(e), 'err');
+        $('refreshAuto').disabled = false;
+      });
+    }
     $('autoProg').textContent = 'Reading ' + unread.length + ' tag(s) again...';
     status('Reading ' + unread.length + ' tag(s) again...', 'busy');
     return runMatcher(unread).then(done, function (e) {
@@ -775,18 +784,7 @@
           sinceSave = 0; lastSave = Date.now();
           if (!saving) saving = Store.backend.save(state).catch(function () {}).then(function () { saving = null; });
         }
-        p.status = res.status;
-        p.barcode = res.barcode || null;   // reliable, and useful the day a barcode-to-design list exists
-        p.message = res.message || null;
-        p.candidates = res.candidates || null;
-        p.conf = res.confidence == null ? null : res.confidence;
-        // the reader's own verdict, kept apart from anything linking adds later
-        p.ocr = { status: p.status, message: p.message, candidates: p.candidates, conf: p.conf };
-        p.linkNote = false; p.linkCands = null;
-        if (res.status === Matcher.STATUS.MATCH && res.code && validCodes[res.code] &&
-            !(p.rejected || []).some(function (k) { return k === res.code; })) {
-          p.designKey = res.code; p.source = 'ocr'; p.how = 'read';
-        }
+        applyResult(p, res);
       }).then(function (out) {
         $('matchProg').textContent = out && out.stopped ? out.unread + ' not read yet.' : '';
         byBarcode();
@@ -794,6 +792,117 @@
         return (saving || Promise.resolve()).then(function () { return Store.backend.save(state); })
           .then(function () { if (out && out.stopped) throw new Error(out.stopped); });
       });
+  }
+
+  // what the reader made of one photograph, recorded on it
+  function applyResult(p, res) {
+    p.status = res.status;
+    p.barcode = res.barcode || null;   // reliable, and useful the day a barcode-to-design list exists
+    p.message = res.message || null;
+    p.candidates = res.candidates || null;
+    p.conf = res.confidence == null ? null : res.confidence;
+    // the reader's own verdict, kept apart from anything linking adds later
+    p.ocr = { status: p.status, message: p.message, candidates: p.candidates, conf: p.conf };
+    p.linkNote = false; p.linkCands = null;
+    if (res.status === Matcher.STATUS.MATCH && res.code && validCodes[res.code] &&
+        !(p.rejected || []).some(function (k) { return k === res.code; })) {
+      p.designKey = res.code; p.source = 'ocr'; p.how = 'read';
+    }
+  }
+
+  /* ---------------- reading in the cloud ----------------
+     With the cloud service, the page only hands the photographs over. The
+     service queues one read per photograph and works through them on its
+     own, several at a time, retrying any that fail, whether or not anyone
+     has this page open. What it read is kept beside the photographs; this
+     page turns those lines into design codes (a moment's work, against the
+     codes in the workbook) the next time it is opened, or as they arrive
+     while it is. */
+  var cloudReading = !!(Store.backend && Store.backend.process);
+  var readsCache = {}, readsSince = '', pollTimer = null, wasWaiting = 0;
+
+  function isWaiting(p) { return isPending(p) && !!p.queuedAt && !readsCache[p.id]; }
+  function waitingCount() { return (state.photos || []).filter(isWaiting).length; }
+
+  function applyReads(repick) {
+    var changed = 0;
+    (state.photos || []).forEach(function (p) {
+      var r = readsCache[p.id];
+      if (!r) return;
+      if (p.readAt === r.at && !repick) return;
+      var fresh = p.readAt !== r.at;
+      p.readAt = r.at;
+      if (fresh) changed++;
+      // a photograph a person (or linking) has decided keeps its decision
+      if (!isPending(p)) return;
+      applyResult(p, r.error ? { status: Matcher.STATUS.ERROR, code: null, message: r.error }
+                             : Matcher.pickCode(r.lines || [], validCodes));
+      delete p.queuedAt;
+      changed++;
+    });
+    if (changed) { byBarcode(); linkPieces(); }
+    return changed;
+  }
+
+  function fetchReads() {
+    return Store.backend.reads(readsSince).then(function (j) {
+      Object.keys(j.reads || {}).forEach(function (id) {
+        var r = j.reads[id]; readsCache[id] = r;
+        if (r.at > readsSince) readsSince = r.at;
+      });
+      return j;
+    });
+  }
+
+  // hand photographs to the cloud; true if any were sent
+  function sendForReading(list) {
+    var todo = list.filter(function (p) { return !readsCache[p.id]; });
+    if (!todo.length) return Promise.resolve(0);
+    var now = new Date().toISOString();
+    var ids = todo.map(function (p) { return p.id; });
+    var sent = 0, chain = Promise.resolve();
+    // a few hundred at a time, so a big zip is never one enormous request
+    for (var i = 0; i < ids.length; i += 300) (function (part) {
+      chain = chain.then(function () { return Store.backend.process(part); })
+        .then(function (r) { sent += (r.queued || 0) + (r.alreadyRead || 0); });
+    })(ids.slice(i, i + 300));
+    return chain.then(function () {
+      todo.forEach(function (p) {
+        p.queuedAt = now;
+        if (!p.status) { p.message = 'Being read in the cloud.'; if (p.ocr) p.ocr.message = p.message; }
+      });
+      return Store.backend.save(state);
+    }).then(function () { pollReads(); return sent; });
+  }
+
+  function readingNote(left) {
+    return n(left) + ' tag' + (left === 1 ? ' is' : 's are') + ' being read in the cloud. ' +
+      'You can close this page: they keep being read, and are labeled the next time it opens.';
+  }
+
+  function pollReads() {
+    clearTimeout(pollTimer);
+    if (!cloudReading || !state) return Promise.resolve();
+    return fetchReads().then(function () {
+      var changed = applyReads(false);
+      var left = waitingCount();
+      if (changed) {
+        Store.backend.save(state).catch(function () {});
+        renderPhotos(); renderLines();
+      }
+      if (left) {
+        $('matchProg').textContent = readingNote(left);
+        status(readingNote(left), 'busy');
+        pollTimer = setTimeout(pollReads, document.hidden ? 30000 : 8000);
+      } else if (wasWaiting) {
+        var hand = (state.photos || []).filter(isPending).length;
+        $('matchProg').textContent = '';
+        status('Every tag has been read in the cloud. ' + (hand
+          ? n(hand) + ' photograph' + (hand === 1 ? '' : 's') + ' still need a code by hand.'
+          : 'Every photograph now has a code.'), 'ok');
+      }
+      wasWaiting = left;
+    }).catch(function () { pollTimer = setTimeout(pollReads, 30000); });
   }
 
   /* The same piece usually gets photographed twice: once showing the goods and
@@ -991,7 +1100,7 @@
     var btn = $('computeBtn');
     btn.disabled = true;
     var total = queue.xlsx.length + queue.photo.length, done = 0, added = 0, skipped = [];
-    var photosBefore = (state.photos || []).length;
+    var photosBefore = (state.photos || []).length, cloudSent = 0;
     status('Reading files...', 'busy'); progress(0);
 
     var chain = Promise.resolve();
@@ -1041,6 +1150,13 @@
     }).then(function () {
       var pending = (state.photos || []).filter(isPending);
       if (!Matcher.configured || !pending.length) return;
+      if (cloudReading) {
+        // only the ones never read: the rest wait for Read codes again
+        var fresh = pending.filter(function (p) { return !p.status || p.status === Matcher.STATUS.ERROR; });
+        if (!fresh.length) return;
+        status('Sending ' + n(fresh.length) + ' tag(s) to be read in the cloud...', 'busy');
+        return sendForReading(fresh).then(function (k) { cloudSent = k; renderPhotos(); });
+      }
       status('Reading design codes off the tags...', 'busy');
       return runMatcher(pending).then(function () { renderPhotos(); renderLines(); });
     }).then(function () {
@@ -1055,6 +1171,7 @@
       var lit = A.lines.filter(function (l) { return thumbByDesign[l.key]; }).length;
       if (lit) msg += ' ' + lit + ' line' + (lit === 1 ? ' has' : 's have') +
                       ' a photograph \u2014 press With photo above the table to see just those.';
+      if (cloudSent) { msg += ' ' + readingNote(waitingCount() || cloudSent); status(msg, 'busy'); return; }
       status(msg, skipped.length && !added ? 'err' : 'ok');
     }).catch(function (e) {
       progress(null);
@@ -1237,6 +1354,25 @@
       if (!pending.length) return;
       $('rematchBtn').disabled = true;
       Matcher.retry();           // a new press is a fresh attempt at the reader too
+      if (cloudReading) {
+        // what the cloud has already read is matched again here, against
+        // today's codes; whatever it has not read yet is sent to it
+        fetchReads().then(function () {
+          var redone = applyReads(true);
+          var unread = (state.photos || []).filter(function (p) { return isPending(p) && !readsCache[p.id]; });
+          return (redone ? Store.backend.save(state) : Promise.resolve()).then(function () {
+            renderPhotos(); renderLines();
+            return sendForReading(unread);
+          });
+        }).then(function (k) {
+          $('rematchBtn').disabled = false;
+          if (!k) {
+            var left = (state.photos || []).filter(isPending).length;
+            status(left ? left + ' photograph(s) still need a code by hand.' : 'Every photograph now has a code.', left ? 'err' : 'ok');
+          }
+        }, function (e) { status(e.message || String(e), 'err'); $('rematchBtn').disabled = false; });
+        return;
+      }
       status('Reading design codes off ' + pending.length + ' tag(s)...', 'busy');
       runMatcher(pending).then(function () {
         renderPhotos(); renderLines();
@@ -1370,6 +1506,21 @@
       status(state.files.length
         ? 'Ready. ' + state.files.length + ' file(s) on record in ' + Store.label + '.'
         : 'Ready. Add today\'s stock report to begin.', 'ok');
+      if (cloudReading) {
+        fetchReads().then(function () {
+          if (applyReads(false)) {
+            Store.backend.save(state).catch(function () {});
+            renderPhotos(); renderLines();
+          }
+          // anything handed over more than an hour ago and still not read is
+          // handed over again: the queue keeps nothing for ever
+          var stale = (state.photos || []).filter(function (p) {
+            return isWaiting(p) && Date.now() - Date.parse(p.queuedAt) > 3600000;
+          });
+          if (stale.length) return sendForReading(stale);
+          if (waitingCount()) { wasWaiting = waitingCount(); pollReads(); }
+        }).catch(function () {});
+      }
     }).catch(function (e) {
       state = Store.blankState();
       renderFiles(); render();

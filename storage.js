@@ -276,6 +276,17 @@
       wipe: function () {
         return call(base + '/api/wipe', function () { return { method: 'POST' }; }, 'clear the history')
           .then(function () {});
+      },
+      // reading happens in the cloud, whether or not this page stays open
+      process: function (ids) {
+        return call(base + '/api/process', function () {
+          return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids }) };
+        }, 'send the photographs for reading').then(function (r) { return r.json(); });
+      },
+      reads: function (since) {
+        return call(base + '/api/reads' + (since ? '?since=' + encodeURIComponent(since) : ''),
+                    function () { return { cache: 'no-store' }; }, 'fetch the readings')
+          .then(function (r) { return r.json(); });
       }
     };
   }
