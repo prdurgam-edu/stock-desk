@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-10-24b';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-10-24c';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -250,7 +250,7 @@
         '<summary><span class="chev" aria-hidden="true"></span>' +
         '<span class="pill ' + k + '">' + LBL[k] + '</span>' +
         '<span class="gn num">' + n(rows.length) + ' line' + (rows.length === 1 ? '' : 's') + '</span>' +
-        '<span class="gs">' + n(bal) + ' pieces on hand &middot; ' + n(sold) + ' sold' +
+        '<span class="gs">' + n(bal) + ' pieces on hand' + (sold ? ' &middot; ' + n(sold) + ' sold' : '') +
           (pics ? ' &middot; <b>' + pics + ' with a photograph</b>' : '') + '</span>' +
         '<span class="gnote">' + groupNote(k) + '</span></summary>' +
         '<div class="gbody"></div></details>';
