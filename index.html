@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20261024b">
 
 <!-- ============================================================
      CONFIGURATION — edit this block only.
@@ -221,13 +221,15 @@ window.NARSINGH_CONFIG = {
 
 <div class="tip" id="tip" role="status" aria-live="polite"></div>
 
-<!-- bundled, so the page works with no internet beyond your own host -->
-<script src="vendor/xlsx.full.min.js"></script>
-<script src="vendor/jszip.min.js"></script>
-<script src="storage.js"></script>
-<script src="compute.js"></script>
-<script src="pieces.js"></script>
-<script src="matcher.js"></script>
-<script src="app.js"></script>
+<!-- bundled, so the page works with no internet beyond your own host.
+     ?v= changes with every release, so a browser never pairs this page with an
+     older cached script. Bump it whenever app.js, styles.css or the others change. -->
+<script src="vendor/xlsx.full.min.js?v=20261024b"></script>
+<script src="vendor/jszip.min.js?v=20261024b"></script>
+<script src="storage.js?v=20261024b"></script>
+<script src="compute.js?v=20261024b"></script>
+<script src="pieces.js?v=20261024b"></script>
+<script src="matcher.js?v=20261024b"></script>
+<script src="app.js?v=20261024b"></script>
 </body>
 </html>
