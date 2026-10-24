@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-10-24c';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-10-24d';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -191,11 +191,11 @@
         va = (a[k] || '').toLowerCase(); vb = (b[k] || '').toLowerCase();
         return va < vb ? -dir : va > vb ? dir : 0;
       }
-      if (k === 'sold') { va = a.soldObs; vb = b.soldObs; }
+      if (k === 'sold') { va = a.sold; vb = b.sold; }
       else if (k === 'idle') { va = a.idle == null ? 1e9 : a.idle; vb = b.idle == null ? 1e9 : b.idle; }
       else if (k === 'cover') { va = a.cover == null ? 1e9 : a.cover; vb = b.cover == null ? 1e9 : b.cover; }
       else { va = a[k] || 0; vb = b[k] || 0; }
-      return (va - vb) * dir;
+      return (va - vb) * dir || (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0);
     });
     return rows;
   }
@@ -243,7 +243,7 @@
     groupRows = {};
     box.innerHTML = GROUPS.filter(function (k) { return by[k] && by[k].length; }).map(function (k) {
       var rows = by[k], bal = 0, sold = 0, pics = 0;
-      rows.forEach(function (l) { bal += l.bal || 0; sold += l.soldObs || 0; if (thumbByDesign[l.key]) pics++; });
+      rows.forEach(function (l) { bal += l.bal || 0; sold += l.sold || 0; if (thumbByDesign[l.key]) pics++; });
       groupRows[k] = rows;
       var open = openGroups[k] || narrowed || filter.status === k;
       return '<details class="grp ' + k + '" data-g="' + k + '"' + (open ? ' open' : '') + '>' +
@@ -341,7 +341,7 @@
       '<figcaption>' +
         '<span class="top"><span class="ref">' + esc(l.ref) + '</span><span class="pill ' + l.status + '">' + LBL[l.status] + '</span></span>' +
         '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span>' +
-        '<span class="nums"><b class="num">' + n(l.bal) + '</b> on hand &middot; <b class="num">' + n(l.soldObs) +
+        '<span class="nums"><b class="num">' + n(l.bal) + '</b> on hand &middot; <b class="num">' + n(l.sold) +
           '</b> sold &middot; ' + n1(l.rate) + '/day</span>' +
         '<span class="clear">' + clear + (l.idle != null ? ' &middot; ' + l.idle + ' days since a sale' : '') + '</span>' +
       '</figcaption></figure>';
@@ -385,7 +385,7 @@
         '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span></td>' +
       '<td>' + sparkline(l.series) + '</td>' +
       '<td class="r m">' + n(l.bal) + '</td>' +
-      '<td class="r m">' + n(l.soldObs) + '</td>' +
+      '<td class="r m">' + n(l.sold) + '</td>' +
       '<td class="r m">' + n1(l.rate) + '</td>' +
       '<td class="r m">' + wks(l.cover, l.bal) + '</td>' +
       '<td class="r m">' + (l.idle == null ? MDASH : l.idle) + '</td>' +
@@ -411,7 +411,7 @@
         '<td>' + sparkline(s.series) + '</td>' +
         '<td class="r m">' + n(s.lines) + '</td>' +
         '<td class="r m">' + n(s.bal) + '</td>' +
-        '<td class="r m">' + n(s.soldObs) + '</td>' +
+        '<td class="r m">' + n(s.sold) + '</td>' +
         '<td class="r m">' + n1(s.rate) + '</td>' +
         '<td class="r m">' + wks(s.cover, s.bal) + '</td>' +
         '<td><span class="pill ' + s.status + '">' + LBL[s.status] + '</span></td></tr>';

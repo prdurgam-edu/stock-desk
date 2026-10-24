@@ -204,6 +204,9 @@
       return {
         key: k, ref: state.refs[k] || k, seller: state.sellers[k] || '',
         bal: bal, soldObs: soldObs, inObs: inObs,
+        // what "Sold" means on the page: the daily files once there are enough
+        // of them to set the pace, until then the full-period export's TotOut
+        sold: basis === 'daily' || !c ? soldObs : c.tout,
         soldCum: c ? c.tout : null, inCum: c ? c.tin : null,
         rate: ratePerDay, cover: cover, series: series,
         lastSale: last, idle: last && asOf ? daysBetween(last, asOf) : null,
@@ -216,10 +219,10 @@
     lines.forEach(function (l) {
       var nm = l.seller || 'Not yet mapped';
       var s = byS[nm] || (byS[nm] = {
-        seller: nm, lines: 0, bal: 0, soldObs: 0, rate: 0,
+        seller: nm, lines: 0, bal: 0, soldObs: 0, sold: 0, rate: 0,
         series: spark.map(function () { return 0; })
       });
-      s.lines++; s.bal += l.bal; s.soldObs += l.soldObs; s.rate += l.rate;
+      s.lines++; s.bal += l.bal; s.soldObs += l.soldObs; s.sold += l.sold; s.rate += l.rate;
       for (var i = 0; i < s.series.length; i++) s.series[i] += l.series[i] || 0;
     });
     var sellers = Object.keys(byS).map(function (nm) {
@@ -228,7 +231,7 @@
       s.status = s.bal <= 0 ? 'soldout' : s.cover == null ? 'dead'
                : s.cover > slowWeeks ? 'slow' : s.cover > fastWeeks ? 'steady' : 'fast';
       return s;
-    }).sort(function (a, b) { return b.soldObs - a.soldObs || b.bal - a.bal; });
+    }).sort(function (a, b) { return b.sold - a.sold || b.bal - a.bal; });
 
     var tot = { fast: 0, steady: 0, slow: 0, dead: 0, soldout: 0 };
     var pcs = { fast: 0, steady: 0, slow: 0, dead: 0, soldout: 0 };
