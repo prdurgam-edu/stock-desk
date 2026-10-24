@@ -409,3 +409,87 @@ td.thumb.nopic .sell{margin-left:33px}
 .linestable tbody tr:has(td.nopic) td{padding-top:13px;padding-bottom:11px}
 .pill.soldout{background:var(--sunk);color:var(--ink-3)}
 #linesView .grp.soldout{border-left-color:var(--rule-2)}
+
+/* ---------- phones ---------- */
+/* Desktop shows the sellers' pills in their own column; the phone puts one
+   beside the name instead. */
+.onphone{display:none}
+tr.sellmore{display:none}
+
+@media (max-width:700px){
+  .wrap{padding:0 14px 64px}
+  h2{font-size:22px}
+
+  /* Lines and Sellers: each row becomes a small card. The design (with its
+     photograph, if any) across the top, the numbers in a three-across grid
+     under it, each with its name. */
+  .linestable thead,#sellerTable thead{display:none}
+  .linestable,.linestable tbody,#sellerTable,#sellerTable tbody{display:block;width:100%}
+  .linestable tr,#sellerTable tbody tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px 10px;padding:12px 14px;border-bottom:1px solid var(--rule)}
+  .linestable td,#sellerTable td{display:block;padding:0 !important;border:0 !important;
+    text-align:left !important;white-space:normal;width:auto !important;min-width:0}
+  .linestable td[data-l]::before,#sellerTable td[data-l]::before{content:attr(data-l);display:block;
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);
+    margin-bottom:2px;font-weight:400}
+  .linestable td[data-l],#sellerTable td[data-l]{font-size:14px;font-weight:600}
+
+  .linestable td.thumb{grid-column:1/-1}
+  .thumb .pic{width:100%}
+  .thumb img{width:100%;height:auto;aspect-ratio:16/9}
+  .thumb .ref{font-size:13.5px}
+  td.thumb.nopic .sell{margin-left:33px}
+  tbody tr.haspic td.thumb{box-shadow:none}
+  .linestable tbody tr:has(td.nopic) td{padding:0 !important}
+  /* the 14-day line and the movement pill say nothing the group or the
+     numbers do not already say, and cost a row each on a small screen */
+  .linestable td.spk,.linestable td.mv,#sellerTable td.spk,#sellerTable td.mv{display:none}
+  .linestable tr.morerow{display:block;padding:12px}
+  .linestable td.morecell{text-align:center}
+
+  #sellerTable td.sname{grid-column:1/-1;font-weight:600;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  #sellerTable .onphone{display:inline-block}
+  #sellerTable tr.later{display:none}
+  #sellerTable.all tr.later{display:grid}
+  #sellerTable tr.sellmore{display:block;padding:12px;text-align:center}
+  #sellerTable.all tr.sellmore{display:none}
+  #sellerTable tr.sellmore td{text-align:center !important}
+  #sellerTable tr.sellmore .iconbtn{margin:0 auto}
+
+  /* By movement: the header stacks, the list inside scrolls a little less tall */
+  #linesView .grp summary{padding:12px 14px;gap:4px 10px}
+  #linesView .gn{font-size:18px}
+  #linesView .gs{flex-basis:100%;font-size:12.5px}
+  #linesView .gscroll{max-height:68vh}
+
+  /* the controls take the full width, two to a row where they fit */
+  .controls{gap:8px}
+  .controls .seg{width:100%}
+  .controls .seg button{flex:1}
+  .controls input[type=search],.controls select{width:100%;min-width:0;flex:1 1 100%}
+
+  /* tag photographs, two to a row instead of one huge one */
+  .photos{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .ph .cap{padding:9px 10px}
+
+  /* the header: the place goes under the shop name instead of off the edge */
+  .topbar-in{padding:10px 14px;gap:10px}
+  .brand{flex-direction:column;gap:2px;flex-basis:100%}
+  .brand .sub{white-space:normal}
+
+  /* uploaded files: one card per sheet, name on top, what it covers under it */
+  #filesDlg thead{display:none}
+  #filesDlg table,#filesDlg tbody{display:block}
+  #filesDlg tbody tr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px 10px;align-items:center;
+    padding:12px 14px;border-bottom:1px solid var(--rule)}
+  #filesDlg td{display:block;padding:0 !important;border:0 !important;min-width:0 !important;white-space:normal}
+  #filesDlg td:first-child{grid-column:1/-1;font-weight:600}
+  #filesDlg td:nth-child(4),#filesDlg td:nth-child(5),#filesDlg td:nth-child(6),#filesDlg td:nth-child(7){display:none}
+  #filesDlg td.rmcell{position:static;background:none;text-align:right}
+  #filesDlg td.empty{grid-column:1/-1}
+
+  /* the uploaded-files dialog uses the whole screen */
+  dialog{max-width:calc(100vw - 16px)}
+  .dlg-head,.dlg-foot{padding:12px 14px}
+  .dlg-body{max-height:70vh}
+}

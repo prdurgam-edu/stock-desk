@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-10-24e';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-10-24f';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -245,7 +245,7 @@
     var box = $('linesView'), by = {};
     linesRows.forEach(function (l) { (by[l.status] = by[l.status] || []).push(l); });
     // a narrow search opens what it found; otherwise groups stay as you left them
-    var narrowed = (filter.q.trim() || filter.seller) && linesRows.length <= 400;
+    var narrowed = (filter.q.trim() || filter.seller || filter.photo) && linesRows.length <= 400;
     groupRows = {};
     box.innerHTML = GROUPS.filter(function (k) { return by[k] && by[k].length; }).map(function (k) {
       var rows = by[k], bal = 0, sold = 0, pics = 0;
@@ -389,13 +389,14 @@
         : '<span class="none" title="No photograph linked yet"></span>') +
         '<span class="ref">' + esc(l.ref) + '</span>' +
         '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span></td>' +
-      '<td>' + sparkline(l.series) + '</td>' +
-      '<td class="r m">' + n(l.bal) + '</td>' +
-      '<td class="r m">' + n(l.sold) + '</td>' +
-      '<td class="r m">' + n1(l.rate) + '</td>' +
-      '<td class="r m">' + wks(l.cover, l.bal) + '</td>' +
-      '<td class="r m">' + (l.idle == null ? MDASH : l.idle) + '</td>' +
-      '<td><span class="pill ' + l.status + '">' + LBL[l.status] + '</span></td></tr>';
+      // data-l names each number, for the phone layout, where rows become cards
+      '<td class="spk">' + sparkline(l.series) + '</td>' +
+      '<td class="r m" data-l="On hand">' + n(l.bal) + '</td>' +
+      '<td class="r m" data-l="Sold">' + n(l.sold) + '</td>' +
+      '<td class="r m" data-l="Per day">' + n1(l.rate) + '</td>' +
+      '<td class="r m" data-l="Weeks to clear">' + wks(l.cover, l.bal) + '</td>' +
+      '<td class="r m" data-l="Days idle">' + (l.idle == null ? MDASH : l.idle) + '</td>' +
+      '<td class="mv"><span class="pill ' + l.status + '">' + LBL[l.status] + '</span></td></tr>';
   }
 
   /* fill every <img data-pid> from storage, once per photo */
@@ -411,17 +412,25 @@
   }
 
   function renderSellers() {
-    $('sellerBody').innerHTML = A.sellers.slice(0, 60).map(function (s) {
-      return '<tr class="' + s.status + '">' +
-        '<td class="m">' + esc(s.seller) + '</td>' +
-        '<td>' + sparkline(s.series) + '</td>' +
-        '<td class="r m">' + n(s.lines) + '</td>' +
-        '<td class="r m">' + n(s.bal) + '</td>' +
-        '<td class="r m">' + n(s.sold) + '</td>' +
-        '<td class="r m">' + n1(s.rate) + '</td>' +
-        '<td class="r m">' + wks(s.cover, s.bal) + '</td>' +
-        '<td><span class="pill ' + s.status + '">' + LBL[s.status] + '</span></td></tr>';
-    }).join('');
+    var list = A.sellers.slice(0, 60);
+    // on a phone the first ten show and a button opens the rest
+    $('sellerBody').innerHTML = list.map(function (s, i) {
+      return '<tr class="' + s.status + (i >= 10 ? ' later' : '') + '">' +
+        '<td class="m sname">' + esc(s.seller) + ' <span class="pill ' + s.status + ' onphone">' + LBL[s.status] + '</span></td>' +
+        '<td class="spk">' + sparkline(s.series) + '</td>' +
+        '<td class="r m" data-l="Lines">' + n(s.lines) + '</td>' +
+        '<td class="r m" data-l="On hand">' + n(s.bal) + '</td>' +
+        '<td class="r m" data-l="Sold">' + n(s.sold) + '</td>' +
+        '<td class="r m" data-l="Per day">' + n1(s.rate) + '</td>' +
+        '<td class="r m" data-l="Weeks to clear">' + wks(s.cover, s.bal) + '</td>' +
+        '<td class="mv"><span class="pill ' + s.status + '">' + LBL[s.status] + '</span></td></tr>';
+    }).join('') + (list.length > 10
+      ? '<tr class="sellmore"><td colspan="8"><button type="button" class="iconbtn" id="sellMore">Show all ' +
+        list.length + ' sellers</button></td></tr>' : '');
+    var sm = $('sellMore');
+    if (sm) sm.addEventListener('click', function () {
+      $('sellerTable').classList.add('all');
+    });
   }
 
   /* A photograph is resolved when it carries a design code, whether the reader
