@@ -44,7 +44,7 @@ TASKS_QUEUE="projects/$PROJECT/locations/$REGION/queues/$QUEUE"
 echo "== Building and deploying $SERVICE (3 to 5 minutes)"
 gcloud run deploy "$SERVICE" --source . --region "$REGION" \
   --allow-unauthenticated --service-account "$SA" \
-  --memory 2Gi --cpu 2 --cpu-boost --concurrency 8 --timeout 300 \
+  --memory 2Gi --cpu 2 --cpu-boost --concurrency 40 --timeout 300 \
   --min-instances 0 --max-instances 6 \
   --set-env-vars "BUCKET=$BUCKET,ALLOWED_ORIGINS=$SITE,TASKS_QUEUE=$TASKS_QUEUE" --quiet
 
