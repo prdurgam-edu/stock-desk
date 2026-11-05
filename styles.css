@@ -493,3 +493,16 @@ tr.sellmore{display:none}
   .dlg-head,.dlg-foot{padding:12px 14px}
   .dlg-body{max-height:70vh}
 }
+
+/* ---------- a photograph that has not loaded ---------- */
+/* never the browser's broken-picture icon with the design code across it:
+   a calm placeholder while it is tried again, and a tap-to-retry if it fails */
+img[data-pid]{color:transparent;font-size:0}
+img.imgwait{visibility:hidden}
+.pic.imgloading,.pic.imgfail{position:relative;background:var(--sunk);border-radius:7px}
+.pic.imgloading::after,.pic.imgfail::after{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  text-align:center;padding:10px;font-size:12px;color:var(--ink-3);line-height:1.4}
+.pic.imgloading::after{content:"Loading photo\2026"}
+.pic.imgfail::after{content:"Photo didn\2019t load. Tap to try again.";cursor:pointer;color:var(--ink-2)}
+.ph .pic.imgloading,.ph .pic.imgfail{display:block}
+.pic.cardpic{display:block;position:relative}

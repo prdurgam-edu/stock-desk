@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-10-24i';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-03a';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -400,10 +400,51 @@
   }
 
   /* fill every <img data-pid> from storage, once per photo */
+  /* A photograph that fails to load (a phone on a weak signal, the service
+     busy reading tags or just waking) is tried again a few times, a little
+     later each time, instead of leaving a broken picture with its code
+     printed across it. If it still will not come, the space says so and a
+     tap tries again. */
+  var IMG_WAITS = [1500, 4000, 10000, 25000];
+  function imgFailed(img) {
+    var tries = +(img.dataset.tries || 0), base = img.dataset.base || img.src;
+    if (!/^https?:/.test(base)) { markImg(img, true); return; }   // a local copy will not improve
+    img.dataset.base = base;
+    if (tries >= IMG_WAITS.length) { markImg(img, true); return; }
+    img.dataset.tries = tries + 1;
+    markImg(img, false, true);
+    setTimeout(function () {
+      img.src = base + (base.indexOf('?') < 0 ? '?' : '&') + 'r=' + (tries + 1);
+    }, IMG_WAITS[tries]);
+  }
+  function markImg(img, failed, loading) {
+    var box = img.closest('.pic');
+    img.classList.toggle('imgwait', !!(failed || loading));
+    if (box && box.classList) {
+      box.classList.toggle('imgfail', !!failed);
+      box.classList.toggle('imgloading', !!loading);
+    }
+  }
+  function retryImg(img) {
+    img.dataset.tries = 0;
+    markImg(img, false, true);
+    var base = img.dataset.base || img.src;
+    img.src = base + (base.indexOf('?') < 0 ? '?' : '&') + 'r=t' + Date.now();
+  }
+
   function hydrate(root) {
     root.querySelectorAll('img[data-pid]:not([data-h])').forEach(function (img) {
       var id = img.dataset.pid;
       img.setAttribute('data-h', '');
+      // a card's main picture gets a frame to hold the loading / retry note
+      if (!img.closest('.pic, .partner, .cand') && img.parentNode) {
+        var frame = document.createElement('span');
+        frame.className = 'pic cardpic';
+        img.parentNode.insertBefore(frame, img);
+        frame.appendChild(img);
+      }
+      img.addEventListener('error', function () { imgFailed(img); });
+      img.addEventListener('load', function () { markImg(img, false, false); });
       if (photoUrls[id]) { img.src = photoUrls[id]; return; }
       Store.backend.getBlobUrl(id).then(function (u) {
         if (u) { photoUrls[id] = u; img.src = u; }
@@ -1423,8 +1464,15 @@
       if (e.key === 'ArrowLeft') { at = (at - 1 + gal.length) % gal.length; lbShow(); }
     });
     document.addEventListener('click', function (e) {
+      // a photograph that would not load: a tap tries it again
+      var dead = e.target.closest && e.target.closest('.imgfail');
+      if (dead) {
+        var di = dead.querySelector('img[data-pid]');
+        if (di) { e.preventDefault(); retryImg(di); }
+        return;
+      }
       var img = e.target.closest && e.target.closest('img[data-big]');
-      if (!img || !img.src) return;
+      if (!img || !img.src || img.classList.contains('imgwait')) return;
       var key = img.dataset.design, set = key && picsByDesign[key];
       if (set && set.length > 1) {
         gal = set.slice(); at = Math.max(0, gal.indexOf(img.dataset.pid));
