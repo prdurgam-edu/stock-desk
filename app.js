@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-03a';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-13a';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -148,12 +148,20 @@
         render();
       });
     });
-    $('tilesNote').textContent = A.basis === 'daily'
-      ? 'Pace is measured from the ' + A.observedDays + ' daily files on record.'
-      : 'Pace still comes from the full-period export. Upload ' + (Compute.MIN_DAILY_DAYS - A.observedDays) +
-        ' more daily file(s) and it switches to real daily movement.';
+    var dn = A.observedDays + ' daily file' + (A.observedDays === 1 ? '' : 's');
+    $('tilesNote').textContent = A.basis === 'blend'
+      ? 'Pace blends the full-period export with the ' + dn + ' on record. Each daily file moves it a little; ' +
+        (A.observedDays < Compute.PRIOR_DAYS
+          ? 'after ' + Compute.PRIOR_DAYS + ' days of files they count as much as the export, and lead from then on.'
+          : 'with ' + A.observedDays + ' days on record they now lead.')
+      : A.basis === 'period'
+      ? 'Pace comes from the full-period export. Upload the daily files and it starts following what actually sells each day.'
+      : A.observedDays >= Compute.MIN_DAILY_DAYS
+      ? 'Pace is measured from the ' + dn + ' on record. Add a full-period export for the seller map and a steadier pace.'
+      : 'Pace comes from only ' + dn + '. Upload ' + (Compute.MIN_DAILY_DAYS - A.observedDays) +
+        ' more, or a full-period export, for a steadier pace.';
 
-    $('linesQual').textContent = A.basis === 'daily' ? 'daily pace' : 'period pace';
+    $('linesQual').textContent = A.basis === 'daily' ? 'daily pace' : A.basis === 'blend' ? 'blended pace' : 'period pace';
 
     // days since a sale needs daily files; until then the choice would sort nothing
     var quiet = $('sortBy').querySelector('option[value="idle"]');
@@ -1066,9 +1074,9 @@
           g.recs.forEach(function (rec) {
             var sh = sheets.filter(function (x) {
               return x.sheet === rec.sheet && x.kind === rec.kind && x.from === rec.from && x.to === rec.to;
-            })[0];
+            })[0];   // one workbook holds each sheet once, so this is the one
             if (!sh) throw new Error('sheet');
-            Compute.ingest(fresh, sh, { id: rec.id, name: rec.name, size: rec.size, rawId: rec.rawId });
+            Compute.ingest(fresh, sh, { id: rec.id, name: rec.name, size: rec.size, rawId: rec.rawId, modified: rec.modified || null });
             fresh.files[fresh.files.length - 1].addedAt = rec.addedAt;   // still uploaded when it was
           });
         });
@@ -1156,21 +1164,28 @@
           if (!sheets.length) { skipped.push(f.name + ' (not an ASR stock report)'); return; }
           // one id for the workbook itself, carried by every sheet taken from it,
           // so removing a file later can rebuild from the workbooks that remain
-          var rawId = uid();
+          var rawId = uid(), meta = { name: f.name, modified: f.lastModified || null };
+          var repairs = {};
           var fresh = sheets.filter(function (sh) {
-            var dup = state.files.filter(function (x) {
-              return x.kind === sh.kind && x.from === sh.from && x.to === sh.to && x.sheet === sh.sheet;
-            })[0];
-            if (dup) skipped.push(f.name + ' ' + sh.sheet + ' (already loaded)');
+            var dup = state.files.filter(function (x) { return Compute.sameAs(x, sh, meta); })[0];
+            if (dup) {
+              skipped.push(f.name + ' ' + sh.sheet + ' (already loaded)');
+              // the same workbook again: keep a fresh copy of it, in case the
+              // first one never reached storage (removing a file needs it)
+              if (dup.rawId) repairs[dup.rawId] = true;
+            }
             return !dup;
           });
-          if (!fresh.length) return;
+          var repaired = Object.keys(repairs).reduce(function (c, id) {
+            return c.then(function () { return Store.backend.putRaw(id, f.name, f).catch(function () {}); });
+          }, Promise.resolve());
+          if (!fresh.length) return repaired;
           // the workbook itself is stored first: removing a file later rebuilds
           // the history from the workbooks kept, so none may be counted unkept
           status('Storing ' + f.name + '...', 'busy');
-          return Store.backend.putRaw(rawId, f.name, f).then(function () {
+          return repaired.then(function () { return Store.backend.putRaw(rawId, f.name, f); }).then(function () {
             fresh.forEach(function (sh) {
-              Compute.ingest(state, sh, { id: uid(), name: f.name, size: f.size, rawId: rawId });
+              Compute.ingest(state, sh, { id: uid(), name: f.name, size: f.size, rawId: rawId, modified: meta.modified });
               added++;
             });
           });

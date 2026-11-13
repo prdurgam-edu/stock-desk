@@ -5,12 +5,21 @@
  *            movement, BalQty is stock on hand at that moment.
  *   master — any wider period. Carries the Supplier column, which the daily
  *            export does not, so it supplies the design-to-seller map.
+ *
+ * Pace (pieces sold a day) blends the two. The full-period export gives every
+ * line a long-run pace; each daily file on record then pulls it toward what
+ * actually sold that day, counting as one day against PRIOR_DAYS days of the
+ * long run. Four days of files therefore nudge the verdicts instead of
+ * overturning them (a line that happened not to sell in those four days is
+ * not suddenly "dead"); after PRIOR_DAYS days of files the two weigh the same,
+ * and from there the daily files lead.
  */
 (function (global) {
   'use strict';
 
   var MONTHS = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
-  var MIN_DAILY_DAYS = 4;   // below this, pace falls back to the full-period export
+  var MIN_DAILY_DAYS = 4;   // with no full-period export, pace needs at least this many days
+  var PRIOR_DAYS = 28;      // how many days of daily files the full-period pace is worth
 
   function normKey(s) { return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
   function num(v) {
@@ -48,6 +57,10 @@
   function parseWorkbook(data, filename) {
     var wb = XLSX.read(data, { type: 'array' });
     var out = [];
+    // the day the export was made, as Excel recorded it: the fallback when a
+    // full-period file's name carries no date
+    var madeAt = wb.Props && (wb.Props.CreatedDate || wb.Props.ModifiedDate);
+    var made = madeAt instanceof Date && !isNaN(madeAt) ? iso(madeAt) : null;
     wb.SheetNames.forEach(function (name) {
       var grid = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' });
       var hdrRow = -1, col = {};
@@ -86,7 +99,7 @@
       if (!rows.length) return;
 
       out.push({
-        sheet: name, from: from, to: to,
+        sheet: name, from: from, to: to, made: made,
         kind: from === to ? 'daily' : 'master',
         hasSeller: col.SUPPLIER !== undefined,
         rows: rows, totalIn: tin, totalOut: tout, lines: rows.length
@@ -95,9 +108,34 @@
     return out;
   }
 
+  /* The day a full-period export describes. Its header ends at the end of the
+     financial year, not the day it was run: take the date from the filename,
+     else the day Excel says the file was made, else the day the file was
+     saved, and never past today. Last year's sheet in the same workbook ends
+     at its own year end, so its balances are last year's closing stock, never
+     today's. */
+  function masterAsOf(sheet, fileMeta) {
+    var today = todayISO();
+    var asOf = dateFromName(fileMeta && fileMeta.name) || sheet.made ||
+               (fileMeta && fileMeta.modified ? iso(new Date(fileMeta.modified)) : null) || today;
+    if (asOf > today) asOf = today;
+    if (asOf > sheet.to) asOf = sheet.to;
+    if (asOf < sheet.from) asOf = sheet.to > today ? today : sheet.to;
+    return asOf;
+  }
+
+  // is this sheet one already on record? A daily is the same day; a full-period
+  // export is the same period run on the same day, so next week's export of the
+  // same financial year is new, not a repeat
+  function sameAs(rec, sheet, fileMeta) {
+    if (rec.kind !== sheet.kind || rec.from !== sheet.from || rec.to !== sheet.to || rec.sheet !== sheet.sheet) return false;
+    if (sheet.kind === 'daily') return true;
+    return (rec.asOf || rec.to) === masterAsOf(sheet, fileMeta);
+  }
+
   /* ---------- fold a parsed sheet into saved state ---------- */
   function ingest(state, sheet, fileMeta) {
-    var i, o;
+    var i, o, asOf = null;
     if (sheet.kind === 'daily') {
       var mv = {}, bal = {};
       for (i = 0; i < sheet.rows.length; i++) {
@@ -123,12 +161,7 @@
         if (!state.refs[o.key]) state.refs[o.key] = o.ref;
         if (o.seller) state.sellers[o.key] = o.seller;   // the seller map lives here
       }
-      // the header's end date is the end of the financial year, not the day the
-      // report was run, so take the date from the filename and never run past today
-      var today = todayISO();
-      var asOf = dateFromName(fileMeta.name) || (sheet.to > today ? today : sheet.to);
-      if (asOf > today) asOf = today;
-      if (asOf < sheet.from) asOf = sheet.to > today ? today : sheet.to;
+      asOf = masterAsOf(sheet, fileMeta);
       var newer = !state.cumulative || asOf > state.cumulative.asOf ||
                   (asOf === state.cumulative.asOf && sheet.to > state.cumulative.to);
       if (newer) {
@@ -144,8 +177,8 @@
       id: fileMeta.id, name: fileMeta.name, size: fileMeta.size, sheet: sheet.sheet,
       rawId: fileMeta.rawId || null,       // where the workbook itself is kept
       kind: sheet.kind, from: sheet.from, to: sheet.to,
-      asOf: sheet.kind === 'daily' ? sheet.from
-            : (state.cumulative && state.cumulative.to === sheet.to ? state.cumulative.asOf : sheet.to),
+      asOf: sheet.kind === 'daily' ? sheet.from : asOf,
+      modified: fileMeta.modified || null,
       lines: sheet.lines,
       totalIn: sheet.totalIn, totalOut: sheet.totalOut,
       hasSeller: sheet.hasSeller, addedAt: new Date().toISOString()
@@ -161,7 +194,10 @@
     var nDays = dates.length;
     var asOf = state.latest ? state.latest.date : (dates[nDays - 1] || null);
     var cum = state.cumulative;
-    var basis = nDays >= MIN_DAILY_DAYS ? 'daily' : (cum ? 'period' : 'daily');
+    // period: the full-period export alone; blend: it and the daily files;
+    // daily: daily files alone (no full-period export loaded)
+    var basis = cum ? (nDays ? 'blend' : 'period') : 'daily';
+    var cumAsOf = cum ? (cum.asOf || cum.to) : null;
 
     // every design we know of
     var keys = {};
@@ -174,12 +210,15 @@
     var periodWeeks = cum ? Math.max(1, daysBetween(cum.from, cum.asOf || cum.to) / 7) : null;
 
     var lines = Object.keys(keys).map(function (k) {
-      var soldObs = 0, inObs = 0, last = null, series = [];
+      var soldObs = 0, inObs = 0, last = null, series = [], soldSince = 0;
       for (var i = 0; i < dates.length; i++) {
         var m = state.days[dates[i]].mv[k];
         var sold = m ? m[1] : 0;
         soldObs += sold; inObs += m ? m[0] : 0;
         if (sold > 0) last = dates[i];
+        // the full-period export was run on cumAsOf, before that day's sales:
+        // daily files from then on are sales it does not yet hold
+        if (cumAsOf && dates[i] >= cumAsOf) soldSince += sold;
       }
       for (var j = 0; j < spark.length; j++) {
         var mm = state.days[spark[j]].mv[k];
@@ -189,8 +228,11 @@
       var c = cum && cum.rows[k];
 
       var ratePerDay;
-      if (basis === 'daily' && nDays) ratePerDay = soldObs / nDays;
-      else if (c && periodWeeks) ratePerDay = c.tout / (periodWeeks * 7);
+      // a design the full-period export has never seen (it arrived since) has
+      // no long run to lean on: its daily files are all there is
+      var periodRate = c && periodWeeks ? c.tout / (periodWeeks * 7) : null;
+      if (periodRate != null && nDays) ratePerDay = (periodRate * PRIOR_DAYS + soldObs) / (PRIOR_DAYS + nDays);
+      else if (periodRate != null) ratePerDay = periodRate;
       else ratePerDay = nDays ? soldObs / nDays : 0;
 
       var cover = ratePerDay > 0 ? (bal / ratePerDay) / 7 : null;   // weeks
@@ -204,9 +246,10 @@
       return {
         key: k, ref: state.refs[k] || k, seller: state.sellers[k] || '',
         bal: bal, soldObs: soldObs, inObs: inObs,
-        // what "Sold" means on the page: the daily files once there are enough
-        // of them to set the pace, until then the full-period export's TotOut
-        sold: basis === 'daily' || !c ? soldObs : c.tout,
+        // what "Sold" means on the page: the year so far, from the full-period
+        // export, plus the daily files that came after it; with no full-period
+        // export, what the daily files recorded
+        sold: cum ? (c ? c.tout : 0) + soldSince : soldObs,
         soldCum: c ? c.tout : null, inCum: c ? c.tin : null,
         rate: ratePerDay, cover: cover, series: series,
         lastSale: last, idle: last && asOf ? daysBetween(last, asOf) : null,
@@ -257,9 +300,12 @@
     parseWorkbook: parseWorkbook,
     dateFromName: dateFromName,
     ingest: ingest,
+    masterAsOf: masterAsOf,
+    sameAs: sameAs,
     analyse: analyse,
     normKey: normKey,
     daysBetween: daysBetween,
-    MIN_DAILY_DAYS: MIN_DAILY_DAYS
+    MIN_DAILY_DAYS: MIN_DAILY_DAYS,
+    PRIOR_DAYS: PRIOR_DAYS
   };
 })(window);

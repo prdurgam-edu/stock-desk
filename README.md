@@ -371,10 +371,17 @@ In the `NARSINGH_CONFIG` block:
 
 ## How the numbers are worked out
 
-**Pace.** Pieces sold divided by the number of days there are files for. With four
-or more daily files the dashboard switches to this and says so. Until then it
-falls back to the full-period export's average, and the panel tells you how many
-more daily files are needed.
+**Pace.** Pieces sold a day. The full-period export gives every line its
+long-run pace (sold this year ÷ days so far). Each daily file then pulls that
+toward what actually sold on its day, counting as one day against 28 days of
+the long run. So a few daily files nudge the verdicts rather than overturning
+them — a line that happened not to sell in four days is not suddenly Dead —
+and after 28 days of files the daily figures lead. A design the full-period
+export has never seen (it arrived since) is judged on its daily files alone.
+With no full-period export loaded, pace is the daily files' average.
+
+**Sold.** The year so far from the newest full-period export, plus the daily
+files dated on or after the day it was run.
 
 **Weeks to clear.** Stock on hand divided by that pace. This is what Fast, Steady,
 Slow and Dead are built on — a line bought in September that has moved 40% in
@@ -392,7 +399,12 @@ refreshed — monthly is plenty unless you add new suppliers often.
   branch or returns to a supplier, every pace here runs fast.
 - The full-period export's header ends at the financial year end (31 March), not
   the day it was run, so the app takes the real date from the **filename**
-  (`ASR_GS__S_05.10.26_1.xlsx` → 5 October 2026). Keep that naming.
+  (`ASR_GS__S_05.10.26_1.xlsx` → 5 October 2026), else from the date Excel
+  recorded inside the file. Last year's sheet in the same workbook is dated its
+  own 31 March, so its closing stock is never mistaken for today's.
+- Uploading next week's full-period export adds it as a new report (the newest
+  one sets the year-to-date figures). Uploading the same report again is
+  skipped, and keeps a fresh stored copy of it in case the first never arrived.
 - Designs are matched by design code, upper-cased with punctuation removed, so
   `25000/BAN` and `25000 BAN` are the same line.
 - A design listed under several buying cities is added up, not overwritten.
@@ -428,9 +440,9 @@ reload.
 
 **A seller column full of dashes** — no full-period export has been loaded yet.
 
-**Pace looks too fast or too slow** — check how many daily files are on record via
-the Uploaded files button. Fewer than four and it is still using the period
-average.
+**Pace looks too fast or too slow** — check the Uploaded files button: the
+newest full-period export sets the long-run pace, so if it is weeks old, upload
+a fresh one.
 
 **A bad file got in** — open Uploaded files and press **Remove** on its row, then
 **Yes**. The dashboard keeps every workbook exactly as uploaded, so removing one
