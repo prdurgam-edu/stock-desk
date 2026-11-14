@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-13a';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-14a';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -868,6 +868,7 @@
      codes in the workbook) the next time it is opened, or as they arrive
      while it is. */
   var cloudReading = !!(Store.backend && Store.backend.process);
+  var restoredPhotos = 0;      // pictures put back from a re-uploaded zip, this Compute
   var readsCache = {}, readsSince = '', pollTimer = null, wasWaiting = 0;
 
   function isWaiting(p) { return isPending(p) && !!p.queuedAt && !readsCache[p.id]; }
@@ -1152,6 +1153,7 @@
     btn.disabled = true;
     var total = queue.xlsx.length + queue.photo.length, done = 0, added = 0, skipped = [];
     var photosBefore = (state.photos || []).length, cloudSent = 0;
+    restoredPhotos = 0;
     status('Reading files...', 'busy'); progress(0);
 
     var chain = Promise.resolve();
@@ -1223,7 +1225,13 @@
       var bits = [];
       if (added) bits.push(added + ' sheet(s)');
       if (newPhotos > 0) bits.push(newPhotos + ' photograph' + (newPhotos === 1 ? '' : 's'));
-      var msg = bits.length ? 'Computed. ' + bits.join(' and ') + ' added.' : 'Nothing new to add.';
+      var msg = bits.length ? 'Computed. ' + bits.join(' and ') + ' added.' : restoredPhotos ? 'Computed.' : 'Nothing new to add.';
+      if (restoredPhotos) {
+        msg += ' ' + restoredPhotos + ' photograph' + (restoredPhotos === 1 ? ' that was' : 's that were') +
+               ' missing from storage put back.';
+        // put-back pictures get described for Should I buy?, in the background
+        if (Store.backend.api) fetch(Store.backend.api + '/api/looks/backfill', { method: 'POST' }).catch(function () {});
+      }
       if (skipped.length) msg += ' Skipped: ' + skipped.join('; ') + '.';
       // a tagged photograph is no use if its line sits past row three hundred
       var lit = A.lines.filter(function (l) { return thumbByDesign[l.key]; }).length;
@@ -1265,7 +1273,7 @@
         : Promise.resolve({});
 
       return chatRead.then(function (chat) {
-        var jobs = [];
+        var jobs = [], seen = [];
         zip.forEach(function (path, entry) {
           if (entry.dir || !/\.(jpe?g|png|webp)$/i.test(path)) return;
           if (/__MACOSX/.test(path)) return;
@@ -1275,15 +1283,36 @@
           if (known) {
             // the same photograph again, perhaps now with its chat: keep the photo, learn the context
             if (info && !known.sender) { Object.assign(known, chatFields(info)); known.batchIsSeller = null; }
+            seen.push({ entry: entry, photo: known });
             return;
           }
           jobs.push({ entry: entry, base: base, info: info });
         });
+        // a photograph already on record whose picture never reached storage
+        // (or was lost) is put back from this zip, under its own record
+        var restore = !seen.length || !Store.backend.missingPhotos ? Promise.resolve() :
+          Store.backend.missingPhotos(seen.map(function (k) { return k.photo.id; })).then(function (gone) {
+            if (!gone.length) return;
+            var lost = {}; gone.forEach(function (id) { lost[id] = true; });
+            var back = seen.filter(function (k) { return lost[k.photo.id]; }), done = 0;
+            status('Putting back ' + back.length + ' photograph(s) that were missing from storage...', 'busy');
+            return pool(back, 3, function (k) {
+              return k.entry.async('blob').then(function (b) {
+                return Store.backend.putBlob(k.photo.id, b);
+              }).then(function () {
+                done++; restoredPhotos++;
+                // a picture that is back can be read and compared again
+                if (k.photo.status === Matcher.STATUS.ERROR) { delete k.photo.status; delete k.photo.ocr; }
+              });
+            });
+          });
         // A few at a time, not all at once: a hundred photographs sent together
         // over a shop connection all crawl, and some give up. Each one is
         // recorded as soon as it is stored, so if the line drops, pressing
         // Compute again carries on from where it stopped.
         var stored = 0;
+        return restore.then(function () {
+        if (!jobs.length) return;
         status('Storing photographs from ' + file.name + ': 0 of ' + jobs.length + '...', 'busy');
         return pool(jobs, 3, function (j) {
           return j.entry.async('blob').then(function (b) {
@@ -1295,6 +1324,7 @@
               status('Storing photographs from ' + file.name + ': ' + stored + ' of ' + jobs.length + '...', 'busy');
             });
           });
+        });
         });
       });
     });

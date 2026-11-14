@@ -283,6 +283,13 @@
           return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids }) };
         }, 'send the photographs for reading').then(function (r) { return r.json(); });
       },
+      // which of these photographs never reached storage (or were lost)
+      missingPhotos: function (ids) {
+        return call(base + '/api/photos/missing', function () {
+          return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids }) };
+        }, 'check the stored photographs').then(function (r) { return r.json(); })
+          .then(function (j) { return j.missing || []; });
+      },
       reads: function (since) {
         return call(base + '/api/reads' + (since ? '?since=' + encodeURIComponent(since) : ''),
                     function () { return { cache: 'no-store' }; }, 'fetch the readings')
