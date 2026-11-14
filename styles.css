@@ -561,3 +561,17 @@ img.imgwait{visibility:hidden}
   .bm-nums{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px}
   .buylink{order:3}
 }
+
+/* ---------- the two tabs: Stock desk, Should I buy? ---------- */
+.tabs{display:flex;gap:4px;margin:18px 0 4px;border-bottom:1px solid var(--rule)}
+.tabs button{font:inherit;font-size:14.5px;font-weight:600;color:var(--ink-3);background:none;border:0;
+  border-bottom:2.5px solid transparent;margin-bottom:-1px;padding:10px 14px 11px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px}
+.tabs button svg{width:17px;height:17px}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+#tabBuy.buy{max-width:860px}
+@media (max-width:700px){
+  .tabs{margin-top:10px}
+  .tabs button{flex:1;justify-content:center;padding:11px 8px}
+}

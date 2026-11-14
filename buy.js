@@ -1,4 +1,4 @@
-/* buy.js — "Should I buy?"
+/* buy.js — the "Should I buy?" tab of the stock desk.
  *
  * At the market: photograph a saree, and see how sarees that look like it
  * have sold in this shop.
@@ -30,43 +30,59 @@
   function n1(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toLocaleString('en-IN'); }
   function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; }
   function status(msg, kind) {
-    $('statusText').textContent = msg;
-    $('statusDot').className = 'dot' + (kind ? ' ' + kind : '');
+    $('buyStatus').textContent = msg;
+    $('buyDot').className = 'dot' + (kind ? ' ' + kind : '');
   }
 
-  /* ---------------- the shop's history ---------------- */
-  function boot() {
-    $('brandPlace').textContent = CFG.shopPlace || '';
-    try {
-      var t = localStorage.getItem('narsingh-theme');
-      if (t) document.documentElement.setAttribute('data-theme', t);
-    } catch (e) {}
+  /* ---------------- the shop's history ----------------
+     The stock desk loads the history and works out every line's numbers; it
+     hands them over each time it redraws, so this tab never loads anything
+     twice and always shows today's figures. */
+  var asked = false;
+  function take_data(e) {
+    var d = e.detail || {};
+    state = d.state; A = d.A;
+    if (!state || !A) return;
+    lines = {}; photos = {};
+    A.lines.forEach(function (l) { lines[l.key] = l; });
+    (state.photos || []).forEach(function (p) { photos[p.id] = p; });
+    tagged = (state.photos || []).filter(function (p) { return p.designKey && !p.unmapped; }).length;
     if (!API || !Store.backend.api) {
       status('This needs the shop’s cloud service (api in config.js): it is what compares photographs.', 'err');
       lock(true);
       return;
     }
+    lock(false);
+    if (!last) status(tagged
+      ? 'Ready. ' + n(tagged) + ' photographs of your sarees to compare against.'
+      : 'No photographs carry a design code yet, so there is nothing to compare against. Add the WhatsApp photographs on the Stock desk tab first.',
+      tagged ? 'ok' : 'err');
+    // any stored photograph not yet described is described in the background
+    if (!asked) { asked = true; fetch(API + '/api/looks/backfill', { method: 'POST' }).catch(function () {}); }
+  }
+
+  /* ---------------- the two tabs ---------------- */
+  function show(tab) {
+    var buy = tab === 'buy';
+    $('tabDesk').classList.toggle('hidden', buy);
+    $('tabBuy').classList.toggle('hidden', !buy);
+    $('tabBtnDesk').setAttribute('aria-selected', String(!buy));
+    $('tabBtnBuy').setAttribute('aria-selected', String(buy));
+    if (location.hash !== (buy ? '#buy' : '') && !(location.hash === '' && !buy)) {
+      try { history.replaceState(null, '', buy ? '#buy' : location.pathname + location.search); } catch (e) {}
+    }
+  }
+  function boot() {
     lock(true);
-    Store.backend.load().then(function (s) {
-      state = s && s.version ? s : Store.blankState();
-      A = Compute.analyse(state, { slowAfterWeeks: CFG.slowAfterWeeks || 26, fastUnderWeeks: CFG.fastUnderWeeks || 8 });
-      A.lines.forEach(function (l) { lines[l.key] = l; });
-      (state.photos || []).forEach(function (p) { photos[p.id] = p; });
-      tagged = (state.photos || []).filter(function (p) { return p.designKey && !p.unmapped; }).length;
-      lock(false);
-      status(tagged
-        ? 'Ready. ' + n(tagged) + ' photographs of your sarees to compare against.'
-        : 'No photographs carry a design code yet, so there is nothing to compare against. Add the WhatsApp photographs on the stock desk first.',
-        tagged ? 'ok' : 'err');
-      // any stored photograph not yet described is described in the background
-      fetch(API + '/api/looks/backfill', { method: 'POST' }).catch(function () {});
-    }).catch(function (e) {
-      status('Could not reach the cloud service (' + (e.message || e) + '). Check the connection and reload.', 'err');
+    document.querySelectorAll('.tabs [data-tab]').forEach(function (b) {
+      b.addEventListener('click', function () { show(b.dataset.tab); window.scrollTo(0, 0); });
     });
+    addEventListener('hashchange', function () { show(location.hash === '#buy' ? 'buy' : 'desk'); });
+    show(location.hash === '#buy' ? 'buy' : 'desk');
   }
   function lock(on) {
     ['inCam', 'inGal'].forEach(function (id) { $(id).disabled = on; });
-    document.querySelectorAll('.buy-pick label').forEach(function (l) { l.classList.toggle('off', on); });
+    document.querySelectorAll('#tabBuy .buy-pick label').forEach(function (l) { l.classList.toggle('off', on); });
   }
 
   /* ---------------- the photograph ---------------- */
@@ -182,13 +198,13 @@
   };
 
   function draw(ds, compared) {
-    $('result').classList.remove('hidden');
+    $('buyResult').classList.remove('hidden');
     if (!ds.length) {
-      $('verdict').innerHTML = '<div class="v-call loose">No match</div>' +
+      $('buyVerdict').innerHTML = '<div class="v-call loose">No match</div>' +
         '<p>None of the photographs it resembles carries a design code yet, so there are no sales to go on.</p>';
       $('qtyBox').classList.add('hidden');
-      $('matches').innerHTML = '';
-      $('foot').textContent = 'Compared with the ' + n(tagged) + ' photographs that carry a design code.';
+      $('buyMatches').innerHTML = '';
+      $('buyFoot').textContent = 'Compared with the ' + n(tagged) + ' photographs that carry a design code.';
       status('Compared. Nothing similar with sales history.', 'err');
       return;
     }
@@ -196,7 +212,7 @@
     var c = CALL[v.call];
     var mix = ['fast', 'steady', 'slow', 'dead', 'soldout'].filter(function (k) { return v.votes[k]; })
       .map(function (k) { return '<span class="pill ' + k + '">' + v.votes[k] + ' ' + LBL[k] + '</span>'; }).join(' ');
-    $('verdict').innerHTML =
+    $('buyVerdict').innerHTML =
       '<div class="v-call ' + v.call + '">' + c[0] + '</div>' +
       '<p class="v-why">' + c[1] + ' <b>' + v.count + ' of the ' + v.of + '</b> look-alike' + (v.of === 1 ? '' : 's') +
         ' sell' + (v.count === 1 ? 's' : '') + ' well (Fast, Steady or sold out)' +
@@ -213,7 +229,7 @@
     $('qtyBox').dataset.perWeek = v.perWeek || 0;
     qty();
 
-    $('matches').innerHTML = ds.map(function (d, i) {
+    $('buyMatches').innerHTML = ds.map(function (d, i) {
       var l = d.line, w = l.cover == null ? (l.bal > 0 ? 'never at this pace' : '—') : Math.round(l.cover) + ' weeks';
       var strength = d.score >= 0.8 ? 'Very close' : d.score >= 0.72 ? 'Close' : 'Similar';
       return '<article class="bm ' + l.status + '">' +
@@ -231,10 +247,10 @@
           '</dl>' +
         '</div></article>';
     }).join('');
-    $('foot').textContent = 'Compared with the ' + n(tagged) + ' photographs of your sarees that carry a design code. ' +
+    $('buyFoot').textContent = 'Compared with the ' + n(tagged) + ' photographs of your sarees that carry a design code. ' +
       'Each saree’s numbers are its own design’s, from the stock desk. Your photograph was not saved.';
     status('Compared. ' + ds.length + ' similar saree' + (ds.length === 1 ? '' : 's') + ' found.', 'ok');
-    $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('buyResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function qty() {
@@ -251,6 +267,7 @@
       (wk < 1.5 ? 'a week' : wk < 9 ? Math.round(wk) + ' weeks' : Math.round(wk / 4.3) + ' months') + '</b> to sell.';
   }
 
+  document.addEventListener('desk:data', take_data);
   $('inCam').addEventListener('change', function () { take(this.files[0]); this.value = ''; });
   $('inGal').addEventListener('change', function () { take(this.files[0]); this.value = ''; });
   $('qty').addEventListener('input', qty);

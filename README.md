@@ -359,8 +359,8 @@ covers both. A label you rejected on purpose comes back too; reject it again.
 
 ## Should I buy?
 
-The **Should I buy?** button at the top of the stock desk opens a page made for
-the phone, at the market. Take a photograph of a saree you are thinking of
+The **Should I buy?** tab, beside **Stock desk** at the top of the page, is made
+for the phone, at the market. Take a photograph of a saree you are thinking of
 buying, and the page shows:
 
 - up to **five sarees from your shop that look most like it** — weave, print,
@@ -447,7 +447,8 @@ refreshed — monthly is plenty unless you add new suppliers often.
 |---|---|
 | `config.js` | The settings, shared by every page |
 | `index.html` | The stock desk |
-| `buy.html`, `buy.js` | Should I buy? |
+| `buy.js` | The Should I buy? tab |
+| `buy.html` | Old address of that tab; leads to it |
 | `styles.css` | All styling, light and dark |
 | `storage.js` | Local browser database and the Google Cloud Storage backend |
 | `compute.js` | Workbook parsing and every calculation |

@@ -4,69 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Should I Buy?</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%235068de'/%3E%3Cpath d='M8 22V10l7 8V10M19 10v12h5' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261114b">
-<script src="config.js?v=20261114b"></script>
+<!-- "Should I buy?" is a tab of the stock desk now; this address still leads there -->
+<meta http-equiv="refresh" content="0; url=index.html#buy">
+<script>location.replace('index.html#buy');</script>
 </head>
-<body>
-
-<header class="topbar"><div class="topbar-in">
-  <div class="brand">
-    <span class="mark">Should I buy?</span>
-    <span class="sub" id="brandPlace"></span>
-  </div>
-  <a class="iconbtn" href="index.html">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg>
-    Stock desk
-  </a>
-</div></header>
-
-<main class="wrap buy">
-  <p class="buy-intro">Take a photograph of the saree you are thinking of buying. It is compared with
-    every saree photographed in your shop, and the ones that look most like it show how sarees like
-    it have sold.</p>
-
-  <section class="buy-pick" aria-label="The saree to check">
-    <label class="btn-primary buy-cam" for="inCam">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 8.5h3l1.5-2h7l1.5 2h3v10H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
-      Take a photo
-    </label>
-    <input type="file" id="inCam" accept="image/*" capture="environment" class="hidden">
-    <label class="iconbtn buy-gal" for="inGal">Choose from gallery</label>
-    <input type="file" id="inGal" accept="image/*" class="hidden">
-  </section>
-
-  <div class="statusline" id="statusline">
-    <span class="dot" id="statusDot"></span>
-    <span id="statusText">Loading your shop's history…</span>
-  </div>
-
-  <section id="result" class="hidden">
-    <div class="buy-top">
-      <figure class="buy-query"><img id="queryImg" alt="The saree you photographed"><figcaption>Your photo</figcaption></figure>
-      <div class="buy-verdict" id="verdict"></div>
-    </div>
-
-    <div class="buy-qty" id="qtyBox">
-      <label for="qty">If I buy</label>
-      <input type="number" id="qty" min="1" max="999" value="10" inputmode="numeric">
-      <span>pieces</span>
-      <p id="qtyNote"></p>
-    </div>
-
-    <h2>Sarees in your shop that look like it</h2>
-    <div class="buy-matches" id="matches"></div>
-    <p class="muted buy-foot" id="foot"></p>
-  </section>
-</main>
-
-<div class="tip" id="tip" role="status" aria-live="polite"></div>
-
-<script src="storage.js?v=20261114b"></script>
-<script src="compute.js?v=20261114b"></script>
-<script src="buy.js?v=20261114c"></script>
-</body>
+<body><p><a href="index.html#buy">Should I buy?</a></p></body>
 </html>

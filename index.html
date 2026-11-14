@@ -8,10 +8,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261114b">
+<link rel="stylesheet" href="styles.css?v=20261114c">
 
 <!-- the settings: config.js, shared by every page -->
-<script src="config.js?v=20261114b"></script>
+<script src="config.js?v=20261114c"></script>
 </head>
 <body>
 
@@ -20,13 +20,6 @@
     <span class="mark" id="brandName">Narsingh Stock Desk</span>
     <span class="sub" id="brandPlace"></span>
   </div>
-
-  <a class="iconbtn buylink" href="buy.html">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-      <path d="M6 7.5h12l-1 12.5H7z"/><path d="M9 9.5V6a3 3 0 0 1 6 0v3.5"/>
-    </svg>
-    Should I buy?
-  </a>
 
   <button class="iconbtn" id="filesBtn" type="button" aria-haspopup="dialog">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -45,6 +38,17 @@
 </div></header>
 
 <main class="wrap">
+
+  <!-- two tabs: the stock desk, and "Should I buy?" for the market -->
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" id="tabBtnDesk" data-tab="desk" aria-selected="true" aria-controls="tabDesk">Stock desk</button>
+    <button type="button" role="tab" id="tabBtnBuy" data-tab="buy" aria-selected="false" aria-controls="tabBuy">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 7.5h12l-1 12.5H7z"/><path d="M9 9.5V6a3 3 0 0 1 6 0v3.5"/></svg>
+      Should I buy?
+    </button>
+  </nav>
+
+  <div id="tabDesk" role="tabpanel" aria-labelledby="tabBtnDesk">
 
   <!-- ---------- intake ---------- -->
   <section class="intake" aria-label="Upload today's files">
@@ -171,6 +175,47 @@
     <div class="big">Nothing computed yet</div>
     <p>Add a stock report above and press Compute. Upload one file a day and this page builds its own history.</p>
   </div>
+  </div>
+
+  <!-- ---------- Should I buy? ---------- -->
+  <div id="tabBuy" role="tabpanel" aria-labelledby="tabBtnBuy" class="hidden buy">
+    <p class="buy-intro">Take a photograph of the saree you are thinking of buying. It is compared with
+      every saree photographed in your shop, and the ones that look most like it show how sarees like
+      it have sold.</p>
+
+    <section class="buy-pick" aria-label="The saree to check">
+      <label class="btn-primary buy-cam" for="inCam">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 8.5h3l1.5-2h7l1.5 2h3v10H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
+        Take a photo
+      </label>
+      <input type="file" id="inCam" accept="image/*" capture="environment" class="hidden">
+      <label class="iconbtn buy-gal" for="inGal">Choose from gallery</label>
+      <input type="file" id="inGal" accept="image/*" class="hidden">
+    </section>
+
+    <div class="statusline">
+      <span class="dot" id="buyDot"></span>
+      <span id="buyStatus">Loading your shop's history…</span>
+    </div>
+
+    <section id="buyResult" class="hidden">
+      <div class="buy-top">
+        <figure class="buy-query"><img id="queryImg" alt="The saree you photographed"><figcaption>Your photo</figcaption></figure>
+        <div class="buy-verdict" id="buyVerdict"></div>
+      </div>
+
+      <div class="buy-qty" id="qtyBox">
+        <label for="qty">If I buy</label>
+        <input type="number" id="qty" min="1" max="999" value="10" inputmode="numeric">
+        <span>pieces</span>
+        <p id="qtyNote"></p>
+      </div>
+
+      <h2>Sarees in your shop that look like it</h2>
+      <div class="buy-matches" id="buyMatches"></div>
+      <p class="muted buy-foot" id="buyFoot"></p>
+    </section>
+  </div>
 </main>
 
 <!-- ---------- uploaded files dialog ---------- -->
@@ -201,12 +246,13 @@
 <!-- bundled, so the page works with no internet beyond your own host.
      ?v= changes with every release, so a browser never pairs this page with an
      older cached script. Bump it whenever app.js, styles.css or the others change. -->
-<script src="vendor/xlsx.full.min.js?v=20261114b"></script>
-<script src="vendor/jszip.min.js?v=20261114b"></script>
-<script src="storage.js?v=20261114b"></script>
-<script src="compute.js?v=20261114b"></script>
-<script src="pieces.js?v=20261114b"></script>
-<script src="matcher.js?v=20261114b"></script>
-<script src="app.js?v=20261114b"></script>
+<script src="vendor/xlsx.full.min.js?v=20261114c"></script>
+<script src="vendor/jszip.min.js?v=20261114c"></script>
+<script src="storage.js?v=20261114c"></script>
+<script src="compute.js?v=20261114c"></script>
+<script src="pieces.js?v=20261114c"></script>
+<script src="matcher.js?v=20261114c"></script>
+<script src="app.js?v=20261114c"></script>
+<script src="buy.js?v=20261114c"></script>
 </body>
 </html>

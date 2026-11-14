@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-14a';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-14b';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -117,6 +117,8 @@
   var LBL = { fast: 'Fast', steady: 'Steady', slow: 'Slow', dead: 'Dead', soldout: 'Sold out' };
 
   function render() {
+    // the "Should I buy?" tab works from the same history and analysis
+    try { document.dispatchEvent(new CustomEvent('desk:data', { detail: { state: state, A: A } })); } catch (e) {}
     if (!A || !A.lines.length) {
       $('results').classList.add('hidden'); $('blank').classList.remove('hidden'); return;
     }
