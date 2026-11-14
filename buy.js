@@ -26,6 +26,7 @@
   var MAX = 5;            // designs shown
   var state = null, A = null, lines = {}, photos = {}, last = null, tagged = 0;
   var removed = {}, extra = 0;   // look-alikes you ruled out; how many more you asked to see
+  var lastD = null, removedD = {}, extraD = 0;   // the same, for "same design, other colours"
 
   function n(v) { return (v == null ? 0 : Math.round(v)).toLocaleString('en-IN'); }
   function n1(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toLocaleString('en-IN'); }
@@ -135,6 +136,8 @@
         return;
       }
       last = designsFrom(j.matches);
+      lastD = designsFrom(j.design || [], true);
+      removedD = {}; extraD = 0;
       removed = {}; extra = 0;
       draw(true);
     }).catch(function (e) {
@@ -148,7 +151,7 @@
      mostly white card and print, so a match on one counts for a little less
      than a match on the cloth itself. */
   var CLOSEUP = 0.03;
-  function designsFrom(matches) {
+  function designsFrom(matches, byDesign) {
     var by = {};
     matches.forEach(function (m) {
       var p = photos[m.id];
@@ -158,7 +161,7 @@
       var goods = p.how === 'timing' || p.how === 'manual';
       var s = m.score - (goods ? 0 : CLOSEUP);
       var d = by[p.designKey];
-      if (!d || s > d.score) by[p.designKey] = { key: p.designKey, line: l, score: s, photo: m.id };
+      if (!d || s > d.score) by[p.designKey] = { key: p.designKey, line: l, score: s, photo: m.id, colour: m.colour };
     });
     var list = Object.keys(by).map(function (k) { return by[k]; })
       .sort(function (a, b) { return b.score - a.score; });
@@ -166,6 +169,10 @@
     var best = list[0].score;
     // close company only: far behind the best, or simply unalike, is not "looks like it"
     // a few spare beyond five, to stand in for any you rule out
+    if (byDesign) {
+      // design scores run lower: black and white, less any colour shared
+      return list.filter(function (d) { return d.score >= Math.max(best - 0.15, 0.45); }).slice(0, MAX + 15);
+    }
     return list.filter(function (d) { return d.score >= Math.max(best - 0.15, 0.6); }).slice(0, MAX + 10);
   }
 
@@ -207,9 +214,14 @@
     return (last || []).filter(function (d) { return !removed[d.key]; }).slice(0, MAX + extra);
   }
 
-  function card(d, i, out) {
+  function card(d, i, out, kind) {
     var l = d.line, w = l.cover == null ? (l.bal > 0 ? 'never at this pace' : '—') : Math.round(l.cover) + ' weeks';
-    var strength = d.score >= 0.8 ? 'Very close' : d.score >= 0.72 ? 'Close' : 'Similar';
+    var strength, tag = kind === 'd' ? 'd:' : 'm:';
+    if (kind === 'd') {
+      var shape = d.score + 0.15 * (d.colour || 0);   // the design alone, before the colour discount
+      strength = (shape >= 0.8 ? 'Very close design' : shape >= 0.7 ? 'Close design' : 'Similar design') +
+        ((d.colour || 0) < 0.5 ? ', other colours' : (d.colour || 0) < 0.7 ? ', some colours shared' : ', same colours');
+    } else strength = d.score >= 0.8 ? 'Very close' : d.score >= 0.72 ? 'Close' : 'Similar';
     var pic = API + '/api/blob/' + encodeURIComponent(d.photo);
     return '<article class="bm ' + l.status + (out ? ' out' : '') + '">' +
       '<a class="bm-pic" href="' + pic + '" target="_blank" rel="noopener"><img src="' + pic + '" alt="' + esc(l.ref) + '" loading="lazy"></a>' +
@@ -226,8 +238,8 @@
           '<div><dt>To clear</dt><dd>' + w + '</dd></div>' +
         '</dl>') +
         (out
-          ? '<button type="button" class="bm-act back" data-back="' + esc(d.key) + '">Put back</button>'
-          : '<button type="button" class="bm-act rm" data-rm="' + esc(d.key) + '">✕ Not a look-alike</button>') +
+          ? '<button type="button" class="bm-act back" data-back="' + tag + esc(d.key) + '">Put back</button>'
+          : '<button type="button" class="bm-act rm" data-rm="' + tag + esc(d.key) + '">✕ ' + (kind === 'd' ? 'Not the same design' : 'Not a look-alike') + '</button>') +
       '</div></article>';
   }
 
@@ -266,9 +278,10 @@
       qty();
     }
 
-    $('buyMatches').innerHTML = ds.map(function (d, i) { return card(d, i, false); }).join('') +
+    $('buyMatches').innerHTML = ds.map(function (d, i) { return card(d, i, false, 'm'); }).join('') +
       (spare > 0 ? '<button type="button" class="iconbtn bm-more" id="bmMore">Show another look-alike <span class="count">' + spare + '</span></button>' : '') +
-      (outs.length ? '<h3 class="bm-outhead">Ruled out</h3>' + outs.map(function (d) { return card(d, 0, true); }).join('') : '');
+      (outs.length ? '<h3 class="bm-outhead">Ruled out</h3>' + outs.map(function (d) { return card(d, 0, true, 'm'); }).join('') : '');
+    drawDesign(ds);
     $('buyFoot').textContent = 'Compared with the ' + n(tagged) + ' photographs of your sarees that carry a design code. ' +
       'Each saree’s numbers are its own design’s, from the stock desk. Your photograph was not saved.';
     if (first) {
@@ -279,12 +292,38 @@
     }
   }
 
-  // ruling out, putting back, asking for one more
+  /* Same design, other colours: compared in black and white, so colour plays no
+     part, and those that share its colours count a little less. A design already
+     counted above is left out here. Its own vote, kept apart from the one above. */
+  function drawDesign(top) {
+    var above = {}; top.forEach(function (d) { above[d.key] = true; });
+    var all = (lastD || []).filter(function (d) { return !above[d.key]; });
+    var keep = all.filter(function (d) { return !removedD[d.key]; });
+    var ds = keep.slice(0, MAX + extraD), outs = all.filter(function (d) { return removedD[d.key]; });
+    var spare = keep.length - ds.length;
+    if (!ds.length) {
+      $('designSum').innerHTML = '<p class="muted">' + (all.length ? 'You ruled out every one. Put one back below.' : 'Nothing else in your shop shares this design.') + '</p>';
+    } else {
+      var v = verdictOf(ds);
+      $('designSum').innerHTML = '<span class="pill ' + (v.call === 'buy' ? 'fast' : v.call === 'some' ? 'steady' : 'slow') + '">' + CALL[v.call][0] + '</span> ' +
+        '<b>' + v.count + ' of ' + v.of + '</b> sell well' +
+        (v.perWeek != null ? ' · about <b>' + n1(v.perWeek) + ' a week</b>' : '') +
+        (v.sellThrough != null ? ' · ' + Math.round(v.sellThrough * 100) + '% of what came in sold' : '');
+    }
+    $('designMatches').innerHTML = ds.map(function (d, i) { return card(d, i, false, 'd'); }).join('') +
+      (spare > 0 ? '<button type="button" class="iconbtn bm-more" id="bmMoreD">Show another <span class="count">' + spare + '</span></button>' : '') +
+      (outs.length ? '<h3 class="bm-outhead">Ruled out</h3>' + outs.map(function (d) { return card(d, 0, true, 'd'); }).join('') : '');
+  }
+
+  // ruling out, putting back, asking for one more (m: the look-alikes, d: same design)
   document.addEventListener('click', function (e) {
-    var t = e.target.closest && e.target.closest('[data-rm], [data-back], #bmMore');
+    var t = e.target.closest && e.target.closest('[data-rm], [data-back], #bmMore, #bmMoreD');
     if (!t || !last) return;
-    if (t.dataset.rm) removed[t.dataset.rm] = true;
-    else if (t.dataset.back) delete removed[t.dataset.back];
+    var k = t.dataset.rm || t.dataset.back || '', set = k.slice(0, 2) === 'd:' ? removedD : removed;
+    k = k.slice(2);
+    if (t.dataset.rm) set[k] = true;
+    else if (t.dataset.back) delete set[k];
+    else if (t.id === 'bmMoreD') extraD++;
     else extra++;
     draw(false);
   });

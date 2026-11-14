@@ -369,12 +369,22 @@ buying, and the page shows:
 - **the verdict**: how many of them sell well (Fast, Steady, or sold out), the
   closer ones counting more, and the pace sarees like it sell at;
 - **how long a quantity would take to sell**: type how many pieces you are
-  thinking of, and it says how many weeks or months that is at that pace.
+  thinking of, and it says how many weeks or months that is at that pace;
+- below them, **Same design, other colours**: up to five more sarees whose
+  weave, print, embroidery or border look like it whatever their colour, with
+  their own short tally of how many sell well and how fast. Useful when the
+  design is what sells.
+
+Any saree in either list you feel is not a match can be ruled out with its
+**✕** button; the tally under it changes at once, the next closest takes its
+place, and it waits under **Ruled out** to be put back.
 
 How it finds look-alikes: every photograph stored with the shop is described
 by the cloud service as 2,048 numbers from ResNet-50, an image model from the
 ONNX model zoo, cut at the layer that describes what a picture looks like
-rather than naming what it is, plus a colour histogram. The new photograph is
+rather than naming what it is, plus a colour histogram. For the design list
+it is also described in black and white, so that colour plays no part, and
+sarees sharing its colours count a little less there. The new photograph is
 described the same way and compared with all of them, about a tenth of a
 second. Photographs of the cloth count a little more than close-ups of the tag.
 Your market photograph is compared, never saved.
