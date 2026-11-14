@@ -79,6 +79,8 @@ the two never overwrite each other.
 | `POST /api/task/read?id=` | One background read; Cloud Tasks calls this |
 | `GET /api/reads?since=` | Every reading so far (or newer than `since`) |
 | `POST /api/similar` | Body: an image. Returns the stored photographs that look most like it (`matches`), and those whose design looks like it whatever the colour (`design`), each with a likeness score; the image is not stored |
+| `DELETE /api/raw/ID` | Deletes a stored workbook (the page calls it when a file is removed) |
+| `POST /api/tidy` | Deletes stored workbooks and photographs (with their readings and looks) that the saved history no longer mentions and that are over an hour old |
 | `POST /api/task/looks?id=` | Describes one stored photograph's look; Cloud Tasks calls this |
 | `POST /api/looks/backfill` | Queues every stored photograph that has no description yet |
 

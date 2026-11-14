@@ -18,7 +18,9 @@
  *   GET  state / PUT state         the computed history, one JSON document
  *   GET  blob/ID / PUT blob/ID     tag photographs
  *   GET  raw/ID  / PUT raw/ID      workbooks exactly as uploaded
+ *   DELETE raw/ID                  forget a removed workbook
  *   POST wipe                      delete everything
+ *   POST tidy                      delete what the history no longer mentions
  *   GET  selftest                  read a known tag; used after every deploy
  *   POST process      {ids}       read these photographs in the background
  *   POST task/read?id=ID          one background read (called by Cloud Tasks)
@@ -255,10 +257,13 @@ class DiskStore {
       if (/\.(type|meta)$/.test(n)) continue;
       let meta = {};
       try { meta = JSON.parse(await fsp.readFile(this.p(prefix + n) + '.meta', 'utf8')); } catch {}
-      out.push({ name: prefix + n, meta });
+      let at = 0;
+      try { at = (await fsp.stat(this.p(prefix + n))).mtimeMs; } catch {}
+      out.push({ name: prefix + n, meta, at });
     }
     return out;
   }
+  async del(k) { for (const x of ['', '.type', '.meta']) await fsp.rm(this.p(k) + x, { force: true }); }
   async wipe() { await fsp.rm(this.dir, { recursive: true, force: true }); }
 }
 
@@ -287,7 +292,12 @@ class GcsStore {
   async list(prefix) {
     const b = await this.ready;
     const [files] = await b.getFiles({ prefix: this.prefix + prefix, autoPaginate: true });
-    return files.map(f => ({ name: f.name.slice(this.prefix.length), meta: (f.metadata && f.metadata.metadata) || {} }));
+    return files.map(f => ({ name: f.name.slice(this.prefix.length), meta: (f.metadata && f.metadata.metadata) || {},
+      at: Date.parse((f.metadata && (f.metadata.updated || f.metadata.timeCreated)) || '') || 0 }));
+  }
+  async del(k) {
+    const b = await this.ready;
+    try { await b.file(this.prefix + k).delete(); } catch (e) { if (e.code !== 404) throw e; }
   }
   async wipe() { const b = await this.ready; await b.deleteFiles({ prefix: this.prefix, force: true }); }
 }
@@ -425,7 +435,7 @@ function cors(req, res) {
   res.setHeader('Vary', 'Origin');
   if (o && (ORIGINS.includes(o) || ORIGINS.includes('*'))) {
     res.setHeader('Access-Control-Allow-Origin', o);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding');
     res.setHeader('Access-Control-Max-Age', '3600');
   }
@@ -516,6 +526,11 @@ const server = http.createServer(async (req, res) => {
         await store.put(k, b, req.headers['content-type'] || 'application/octet-stream');
         return send(res, 200, { ok: true });
       }
+      // a workbook removed from the dashboard is removed from storage too
+      if (req.method === 'DELETE' && m[1] === 'raw') {
+        await store.del(k);
+        return send(res, 200, { ok: true });
+      }
     }
 
     if (route === 'process' && req.method === 'POST') {
@@ -604,7 +619,38 @@ const server = http.createServer(async (req, res) => {
 
     if (route === 'wipe' && req.method === 'POST') {
       await store.wipe();
+      looksCache = null;
       return send(res, 200, { ok: true });
+    }
+
+    // anything stored that the history no longer mentions is deleted: workbooks
+    // of removed files, and photographs (with their readings and looks) that
+    // are not on record. Only what is over an hour old, so nothing an upload in
+    // progress has stored before saving the history is touched.
+    if (route === 'tidy' && req.method === 'POST') {
+      const got = await store.get('state.json');
+      let st = null;
+      try { st = got && JSON.parse(got.body.toString('utf8')); } catch {}
+      if (!st || !Array.isArray(st.files) || !Array.isArray(st.photos)) return send(res, 200, { skipped: 'no history' });
+      const rawKeep = new Set(st.files.map(f => f.rawId).filter(Boolean));
+      const photoKeep = new Set(st.photos.map(p => p.id).filter(Boolean));
+      const old = Date.now() - 3600e3, out = { raw: 0, photos: 0, reads: 0, looks: 0 };
+      const sweep = async (prefix, keep, strip, key) => {
+        const gone = (await store.list(prefix)).filter(f => {
+          const id = f.name.slice(prefix.length).replace(strip, '');
+          return !keep.has(id) && f.at && f.at < old;
+        });
+        for (let i = 0; i < gone.length; i += 50) {
+          await Promise.all(gone.slice(i, i + 50).map(f => store.del(f.name)));
+        }
+        out[key] = gone.length;
+      };
+      await sweep('raw/', rawKeep, /$^/, 'raw');
+      await sweep('photos/', photoKeep, /$^/, 'photos');
+      await sweep('reads/', photoKeep, /\.json$/, 'reads');
+      await sweep('looks/', photoKeep, /\.json$/, 'looks');
+      if (out.looks) looksCache = null;
+      return send(res, 200, out);
     }
 
     if (route === 'selftest') {
