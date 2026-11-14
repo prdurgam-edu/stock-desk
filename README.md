@@ -23,7 +23,7 @@ depends on Claude or on any service other than the one you host it on.
 
 ## In the cloud, or in the browser
 
-The page works two ways, chosen by one line in `index.html`:
+The page works two ways, chosen by one line in `config.js`:
 
 ```js
 api: "https://stock-desk-api-….a.run.app",   // set: the cloud does the work
@@ -134,7 +134,7 @@ refused by Google, not by this page.
 
 ### 5. Fill in the config
 
-In `index.html`, near the top:
+In `config.js`:
 
 ```js
 window.NARSINGH_CONFIG = {
@@ -357,9 +357,36 @@ covers both. A label you rejected on purpose comes back too; reject it again.
 
 ---
 
+## Should I buy?
+
+The **Should I buy?** button at the top of the stock desk opens a page made for
+the phone, at the market. Take a photograph of a saree you are thinking of
+buying, and the page shows:
+
+- up to **five sarees from your shop that look most like it** — weave, print,
+  embroidery, colour — each with its own design code, seller, pieces on hand,
+  pieces sold, pace a week, weeks to clear and movement;
+- **the verdict**: how many of them sell well (Fast, Steady, or sold out), the
+  closer ones counting more, and the pace sarees like it sell at;
+- **how long a quantity would take to sell**: type how many pieces you are
+  thinking of, and it says how many weeks or months that is at that pace.
+
+How it finds look-alikes: every photograph stored with the shop is described
+by the cloud service as 2,048 numbers from ResNet-50, an image model from the
+ONNX model zoo, cut at the layer that describes what a picture looks like
+rather than naming what it is, plus a colour histogram. The new photograph is
+described the same way and compared with all of them, about a tenth of a
+second. Photographs of the cloth count a little more than close-ups of the tag.
+Your market photograph is compared, never saved.
+
+New photographs are described in the background as they are read. On the
+shop's own photographs, a kalamkari found the shop's kalamkari, a bandhani the
+shop's bandhanis, and a tissue the shop's tissue. It is a guide, drawn from
+your own sales, not a promise: a saree unlike anything you stock says so.
+
 ## Settings you may want to change
 
-In the `NARSINGH_CONFIG` block:
+In `config.js`:
 
 | Key | Meaning |
 |---|---|
@@ -418,7 +445,9 @@ refreshed — monthly is plenty unless you add new suppliers often.
 
 | File | What it is |
 |---|---|
-| `index.html` | Page structure and the config block |
+| `config.js` | The settings, shared by every page |
+| `index.html` | The stock desk |
+| `buy.html`, `buy.js` | Should I buy? |
 | `styles.css` | All styling, light and dark |
 | `storage.js` | Local browser database and the Google Cloud Storage backend |
 | `compute.js` | Workbook parsing and every calculation |

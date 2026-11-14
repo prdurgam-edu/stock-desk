@@ -8,41 +8,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261113a">
+<link rel="stylesheet" href="styles.css?v=20261114a">
 
-<!-- ============================================================
-     CONFIGURATION — edit this block only.
-     Leave bucket empty to run entirely in this browser (local mode).
-     Fill it in to keep everything in Google Cloud Storage instead.
-     See README.md for the five setup steps.
-     ============================================================ -->
-<script>
-window.NARSINGH_CONFIG = {
-  gcsBucket:      "",            // e.g. "narsingh-stock-data"
-  gcsPrefix:      "stock/",      // folder inside the bucket
-  googleClientId: "",            // OAuth client ID ending in .apps.googleusercontent.com
-  shopName:       "Shri Narsingh Fashions LLP",
-  shopPlace:      "A S Rao Nagar, Hyderabad",
-  slowAfterWeeks: 26,            // a line is Slow when its stock needs longer than this to clear
-  fastUnderWeeks: 8,
-
-  // The shop's cloud service (api/ in this repository, deployed to Cloud Run).
-  // Set: tags are read in Google Cloud and every file and the history are kept
-  // there, so any computer opening this page sees the same dashboard.
-  // Empty: everything happens in this browser, as before.
-  api: "https://stock-desk-api-jgfr5erpxq-el.a.run.app",
-
-  // Reading tags in the browser: PaddleOCR's PP-OCRv4 models, used when api is
-  // empty, or if the cloud service cannot be reached. Keep the ocr/ folder
-  // next to this file.
-  ocr: {
-    path: "ocr/"                 // where ocr.bundle.js, models/ and ort/ live
-  },
-  tagMatcher: {
-    column: "C. REF"             // the workbook column codes are matched against
-  }
-};
-</script>
+<!-- the settings: config.js, shared by every page -->
+<script src="config.js?v=20261114a"></script>
 </head>
 <body>
 
@@ -51,6 +20,13 @@ window.NARSINGH_CONFIG = {
     <span class="mark" id="brandName">Narsingh Stock Desk</span>
     <span class="sub" id="brandPlace"></span>
   </div>
+
+  <a class="iconbtn buylink" href="buy.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path d="M6 7.5h12l-1 12.5H7z"/><path d="M9 9.5V6a3 3 0 0 1 6 0v3.5"/>
+    </svg>
+    Should I buy?
+  </a>
 
   <button class="iconbtn" id="filesBtn" type="button" aria-haspopup="dialog">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
@@ -225,12 +201,12 @@ window.NARSINGH_CONFIG = {
 <!-- bundled, so the page works with no internet beyond your own host.
      ?v= changes with every release, so a browser never pairs this page with an
      older cached script. Bump it whenever app.js, styles.css or the others change. -->
-<script src="vendor/xlsx.full.min.js?v=20261113a"></script>
-<script src="vendor/jszip.min.js?v=20261113a"></script>
-<script src="storage.js?v=20261113a"></script>
-<script src="compute.js?v=20261113a"></script>
-<script src="pieces.js?v=20261113a"></script>
-<script src="matcher.js?v=20261113a"></script>
-<script src="app.js?v=20261113a"></script>
+<script src="vendor/xlsx.full.min.js?v=20261114a"></script>
+<script src="vendor/jszip.min.js?v=20261114a"></script>
+<script src="storage.js?v=20261114a"></script>
+<script src="compute.js?v=20261114a"></script>
+<script src="pieces.js?v=20261114a"></script>
+<script src="matcher.js?v=20261114a"></script>
+<script src="app.js?v=20261114a"></script>
 </body>
 </html>

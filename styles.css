@@ -506,3 +506,58 @@ img.imgwait{visibility:hidden}
 .pic.imgfail::after{content:"Photo didn\2019t load. Tap to try again.";cursor:pointer;color:var(--ink-2)}
 .ph .pic.imgloading,.ph .pic.imgfail{display:block}
 .pic.cardpic{display:block;position:relative}
+
+/* ---------- Should I buy? ---------- */
+.buylink{border-color:var(--accent);color:var(--accent)}
+.buy{max-width:860px}
+.buy-intro{color:var(--ink-2);font-size:14.5px;line-height:1.55;margin:22px 0 16px;max-width:60ch}
+.buy-pick{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.buy-cam{display:inline-flex;align-items:center;gap:9px;cursor:pointer;padding:13px 22px;font-size:15px}
+.buy-cam svg{width:20px;height:20px}
+.buy-gal{cursor:pointer;padding:12px 18px}
+.buy-pick label.off{opacity:.45;pointer-events:none}
+#result{margin-top:22px}
+.buy-top{display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:start}
+.buy-query{margin:0}
+.buy-query img{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:var(--r);border:1px solid var(--rule);background:var(--sunk);display:block}
+.buy-query figcaption{font-size:12px;color:var(--ink-3);margin-top:5px;text-align:center}
+.buy-verdict{background:var(--card);border:1px solid var(--rule);border-radius:var(--r);padding:18px 20px;box-shadow:var(--shadow)}
+.v-call{font-family:var(--display);font-size:26px;font-weight:600;line-height:1.15}
+.v-call.buy{color:var(--fast)} .v-call.some{color:var(--slow)} .v-call.skip,.v-call.loose{color:var(--dead)}
+.v-why{margin:8px 0 10px;color:var(--ink-2);font-size:14px;line-height:1.5}
+.v-mix{display:flex;gap:6px;flex-wrap:wrap}
+.v-nums,.bm-nums{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0 0}
+.v-nums div,.bm-nums div{min-width:0}
+.v-nums dt,.bm-nums dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+.v-nums dd{margin:2px 0 0;font-family:var(--display);font-size:24px;font-weight:600}
+.v-nums dd small{font-family:inherit;font-size:13px;font-weight:400;color:var(--ink-3)}
+.v-warn,.v-note{margin:12px 0 0;font-size:12.5px;line-height:1.45;color:var(--ink-3)}
+.v-warn{color:var(--dead)}
+.buy-qty{margin:16px 0 4px;background:var(--sunk);border-radius:var(--r);padding:14px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:14px}
+.buy-qty input{width:84px;font:inherit;font-size:16px;padding:7px 10px;border:1px solid var(--rule-2);border-radius:8px;background:var(--card);color:var(--ink)}
+.buy-qty p{flex-basis:100%;margin:4px 0 0;color:var(--ink-2);line-height:1.5}
+.buy h2{margin-top:26px}
+.buy-matches{display:grid;gap:12px}
+.bm{display:grid;grid-template-columns:150px 1fr;background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--ink-3);border-radius:var(--r);overflow:hidden}
+.bm.fast{border-left-color:var(--fast)} .bm.steady{border-left-color:var(--steady)}
+.bm.slow{border-left-color:var(--slow)} .bm.dead{border-left-color:var(--dead)}
+.bm-pic img{width:100%;height:100%;min-height:150px;object-fit:cover;display:block;background:var(--sunk)}
+.bm-body{padding:12px 14px;min-width:0}
+.bm-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bm-rank{width:22px;height:22px;border-radius:50%;background:var(--ink);color:var(--paper);font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex:none}
+.bm-ref{font-family:var(--mono);font-weight:600;font-size:14px;word-break:break-all}
+.bm-sell{font-size:12.5px;color:var(--ink-3);margin-top:3px}
+.bm-str{color:var(--ink-2)}
+.bm-nums{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:10px}
+.bm-nums dd{margin:2px 0 0;font-weight:600;font-size:15px}
+.buy-foot{margin-top:14px;font-size:12.5px;line-height:1.5}
+@media (max-width:640px){
+  .buy-top{grid-template-columns:1fr}
+  .buy-query{max-width:180px}
+  .buy-cam{flex:1 1 100%;justify-content:center}
+  .buy-gal{flex:1 1 100%;text-align:center;justify-content:center}
+  .bm{grid-template-columns:110px 1fr}
+  .bm-pic img{min-height:130px}
+  .bm-nums{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px}
+  .buylink{order:3}
+}
