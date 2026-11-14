@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-14e';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-14f';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -1062,6 +1062,9 @@
     rebuildWithout(id).then(function (fresh) {
       state = fresh;
       return persistAndDraw().then(function () {
+        // the workbook itself goes from the cloud too, once no other sheet of it is kept
+        var still = state.files.some(function (x) { return x.rawId === f.rawId; });
+        if (f.rawId && !still && Store.backend.delRaw) Store.backend.delRaw(f.rawId).catch(function () {});
         var done = 'Removed ' + f.name + '. Everything recomputed from the ' + state.files.length +
                ' file(s) that remain.';
         status(done, 'ok'); filesMsg(done, 'ok');
@@ -1462,7 +1465,10 @@
       Store.backend.wipe().then(function () {
         state = Store.blankState(); photoUrls = {};
         return persistAndDraw();
-      }).then(function () { $('filesDlg').close(); status('Everything cleared.', 'ok'); });
+      }).then(function () {
+        $('filesDlg').close();
+        status('Everything cleared, including every Excel file and photograph kept in ' + Store.label + '.', 'ok');
+      }).catch(function (e) { status('Could not clear everything: ' + ((e && e.message) || e) + '. Nothing was lost; try again.', 'err'); });
     });
     $('exportBtn').addEventListener('click', function () {
       var blob = new Blob([JSON.stringify(state, null, 1)], { type: 'application/json' });
@@ -1659,6 +1665,8 @@
         }).catch(function () {});
       }
       checkCopies();
+      // clear out of the cloud anything the history no longer mentions
+      if (Store.backend.tidy && state.version) Store.backend.tidy().catch(function () {});
       status(state.files.length
         ? 'Ready. ' + state.files.length + ' file(s) on record in ' + Store.label + '.'
         : 'Ready. Add today\'s stock report to begin.', 'ok');

@@ -269,6 +269,14 @@
           return { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: blob };
         }, 'store a workbook').then(function () {});
       },
+      // a removed workbook goes from the cloud too
+      delRaw: function (id) {
+        return fetch(base + '/api/raw/' + encodeURIComponent(id), { method: 'DELETE' }).then(function (r) { return r.ok; });
+      },
+      // delete anything stored that the saved history no longer mentions
+      tidy: function () {
+        return fetch(base + '/api/tidy', { method: 'POST' }).then(function (r) { return r.ok ? r.json() : null; });
+      },
       getRaw: function (id) {
         return fetch(base + '/api/raw/' + encodeURIComponent(id))
           .then(function (r) { return r.ok ? r.blob() : null; });

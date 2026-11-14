@@ -496,6 +496,12 @@ marks it **stored copy missing**), nothing is removed and the page says which
 file to upload again. Uploading it again is safe: it is recognised as already
 loaded, is not counted twice, and its stored copy is put back.
 
+What is in the cloud follows what is on the page: removing a file deletes its
+stored workbook, **Clear everything** deletes every workbook, photograph,
+reading and history kept there, and each time the page opens it deletes
+anything stored that the history no longer mentions (left over from earlier
+removals or repeated uploads; only what is over an hour old).
+
 **Clear everything** asks for a second press within four seconds rather than a
 pop-up — browsers block pop-ups inside embedded previews, which is why the
 buttons used to do nothing there.
