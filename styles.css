@@ -575,3 +575,13 @@ img.imgwait{visibility:hidden}
   .tabs{margin-top:10px}
   .tabs button{flex:1;justify-content:center;padding:11px 8px}
 }
+
+/* ruling a look-alike out */
+.bm-act{margin-top:10px;font:inherit;font-size:12.5px;font-weight:600;border-radius:999px;padding:5px 12px;cursor:pointer;background:var(--card)}
+.bm-act.rm{border:1px solid var(--rule-2);color:var(--ink-2)}
+.bm-act.rm:hover{border-color:var(--dead);color:var(--dead)}
+.bm-act.back{border:1px solid var(--accent);color:var(--accent)}
+.bm.out{opacity:.62;grid-template-columns:90px 1fr}
+.bm.out .bm-pic img{min-height:90px}
+.bm-more{justify-self:start}
+.bm-outhead{margin:14px 0 0;font-size:13px;color:var(--ink-3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-weight:500}

@@ -25,6 +25,7 @@
   var LBL = { fast: 'Fast', steady: 'Steady', slow: 'Slow', dead: 'Dead', soldout: 'Sold out' };
   var MAX = 5;            // designs shown
   var state = null, A = null, lines = {}, photos = {}, last = null, tagged = 0;
+  var removed = {}, extra = 0;   // look-alikes you ruled out; how many more you asked to see
 
   function n(v) { return (v == null ? 0 : Math.round(v)).toLocaleString('en-IN'); }
   function n1(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toLocaleString('en-IN'); }
@@ -134,7 +135,8 @@
         return;
       }
       last = designsFrom(j.matches);
-      draw(last, j.compared);
+      removed = {}; extra = 0;
+      draw(true);
     }).catch(function (e) {
       lock(false);
       status(e.message || String(e), 'err');
@@ -163,7 +165,8 @@
     if (!list.length) return [];
     var best = list[0].score;
     // close company only: far behind the best, or simply unalike, is not "looks like it"
-    return list.filter(function (d) { return d.score >= Math.max(best - 0.15, 0.6); }).slice(0, MAX);
+    // a few spare beyond five, to stand in for any you rule out
+    return list.filter(function (d) { return d.score >= Math.max(best - 0.15, 0.6); }).slice(0, MAX + 10);
   }
 
   /* ---------------- the verdict ---------------- */
@@ -197,61 +200,94 @@
     skip: ['Think twice', 'Sarees like this have been slow to sell in your shop.']
   };
 
-  function draw(ds, compared) {
-    $('buyResult').classList.remove('hidden');
-    if (!ds.length) {
-      $('buyVerdict').innerHTML = '<div class="v-call loose">No match</div>' +
-        '<p>None of the photographs it resembles carries a design code yet, so there are no sales to go on.</p>';
-      $('qtyBox').classList.add('hidden');
-      $('buyMatches').innerHTML = '';
-      $('buyFoot').textContent = 'Compared with the ' + n(tagged) + ' photographs that carry a design code.';
-      status('Compared. Nothing similar with sales history.', 'err');
-      return;
-    }
-    var v = verdictOf(ds);
-    var c = CALL[v.call];
-    var mix = ['fast', 'steady', 'slow', 'dead', 'soldout'].filter(function (k) { return v.votes[k]; })
-      .map(function (k) { return '<span class="pill ' + k + '">' + v.votes[k] + ' ' + LBL[k] + '</span>'; }).join(' ');
-    $('buyVerdict').innerHTML =
-      '<div class="v-call ' + v.call + '">' + c[0] + '</div>' +
-      '<p class="v-why">' + c[1] + ' <b>' + v.count + ' of the ' + v.of + '</b> look-alike' + (v.of === 1 ? '' : 's') +
-        ' sell' + (v.count === 1 ? 's' : '') + ' well (Fast, Steady or sold out)' +
-        (v.of > 1 ? ', and the closest count the most.' : '.') + '</p>' +
-      '<div class="v-mix">' + mix + '</div>' +
-      '<dl class="v-nums">' +
-        '<div><dt>Sell at about</dt><dd>' + (v.perWeek == null ? '—' : n1(v.perWeek)) + '<small> a week</small></dd></div>' +
-        '<div><dt>Sold of what came in</dt><dd>' + (v.sellThrough == null ? '—' : Math.round(v.sellThrough * 100) + '%') + '</dd></div>' +
-      '</dl>' +
-      (v.close === 'loose'
-        ? '<p class="v-warn">Nothing in your shop looks very much like this one, so take this as a rough guide only.</p>'
-        : v.close === 'fair' ? '<p class="v-note">The matches are fair, not close: a guide, not a promise.</p>' : '');
-    $('qtyBox').classList.remove('hidden');
-    $('qtyBox').dataset.perWeek = v.perWeek || 0;
-    qty();
+  /* What is shown: the five closest you have not ruled out, plus any more you
+     asked for. Ruling one out ("Not a look-alike") takes it out of the vote
+     and the averages at once; it waits at the bottom to be put back. */
+  function shown() {
+    return (last || []).filter(function (d) { return !removed[d.key]; }).slice(0, MAX + extra);
+  }
 
-    $('buyMatches').innerHTML = ds.map(function (d, i) {
-      var l = d.line, w = l.cover == null ? (l.bal > 0 ? 'never at this pace' : '—') : Math.round(l.cover) + ' weeks';
-      var strength = d.score >= 0.8 ? 'Very close' : d.score >= 0.72 ? 'Close' : 'Similar';
-      return '<article class="bm ' + l.status + '">' +
-        '<a class="bm-pic" href="' + API + '/api/blob/' + encodeURIComponent(d.photo) + '" target="_blank" rel="noopener">' +
-          '<img src="' + API + '/api/blob/' + encodeURIComponent(d.photo) + '" alt="' + esc(l.ref) + '" loading="lazy"></a>' +
-        '<div class="bm-body">' +
-          '<div class="bm-top"><span class="bm-rank">' + (i + 1) + '</span><span class="bm-ref">' + esc(l.ref) + '</span>' +
-            '<span class="pill ' + l.status + '">' + LBL[l.status] + '</span></div>' +
-          '<div class="bm-sell">' + esc(l.seller || 'seller not mapped') + ' · <span class="bm-str">' + strength + '</span></div>' +
-          '<dl class="bm-nums">' +
-            '<div><dt>On hand</dt><dd>' + n(l.bal) + '</dd></div>' +
-            '<div><dt>Sold</dt><dd>' + n(l.sold) + '</dd></div>' +
-            '<div><dt>A week</dt><dd>' + n1(l.rate * 7) + '</dd></div>' +
-            '<div><dt>To clear</dt><dd>' + w + '</dd></div>' +
-          '</dl>' +
-        '</div></article>';
-    }).join('');
+  function card(d, i, out) {
+    var l = d.line, w = l.cover == null ? (l.bal > 0 ? 'never at this pace' : '—') : Math.round(l.cover) + ' weeks';
+    var strength = d.score >= 0.8 ? 'Very close' : d.score >= 0.72 ? 'Close' : 'Similar';
+    var pic = API + '/api/blob/' + encodeURIComponent(d.photo);
+    return '<article class="bm ' + l.status + (out ? ' out' : '') + '">' +
+      '<a class="bm-pic" href="' + pic + '" target="_blank" rel="noopener"><img src="' + pic + '" alt="' + esc(l.ref) + '" loading="lazy"></a>' +
+      '<div class="bm-body">' +
+        '<div class="bm-top">' + (out ? '' : '<span class="bm-rank">' + (i + 1) + '</span>') +
+          '<span class="bm-ref">' + esc(l.ref) + '</span>' +
+          '<span class="pill ' + l.status + '">' + LBL[l.status] + '</span></div>' +
+        '<div class="bm-sell">' + esc(l.seller || 'seller not mapped') + ' · <span class="bm-str">' + strength + '</span></div>' +
+        (out ? '' :
+        '<dl class="bm-nums">' +
+          '<div><dt>On hand</dt><dd>' + n(l.bal) + '</dd></div>' +
+          '<div><dt>Sold</dt><dd>' + n(l.sold) + '</dd></div>' +
+          '<div><dt>A week</dt><dd>' + n1(l.rate * 7) + '</dd></div>' +
+          '<div><dt>To clear</dt><dd>' + w + '</dd></div>' +
+        '</dl>') +
+        (out
+          ? '<button type="button" class="bm-act back" data-back="' + esc(d.key) + '">Put back</button>'
+          : '<button type="button" class="bm-act rm" data-rm="' + esc(d.key) + '">✕ Not a look-alike</button>') +
+      '</div></article>';
+  }
+
+  function draw(first) {
+    $('buyResult').classList.remove('hidden');
+    var all = last || [], ds = shown();
+    var outs = all.filter(function (d) { return removed[d.key]; });
+    var spare = all.filter(function (d) { return !removed[d.key]; }).length - ds.length;
+
+    if (!all.length || !ds.length) {
+      $('buyVerdict').innerHTML = !all.length
+        ? '<div class="v-call loose">No match</div><p>None of the photographs it resembles carries a design code yet, so there are no sales to go on.</p>'
+        : '<div class="v-call loose">Nothing left to go on</div><p>You ruled out every look-alike. Put one back below, or try another photograph.</p>';
+      $('qtyBox').classList.add('hidden');
+    } else {
+      var v = verdictOf(ds);
+      var c = CALL[v.call];
+      var mix = ['fast', 'steady', 'slow', 'dead', 'soldout'].filter(function (k) { return v.votes[k]; })
+        .map(function (k) { return '<span class="pill ' + k + '">' + v.votes[k] + ' ' + LBL[k] + '</span>'; }).join(' ');
+      $('buyVerdict').innerHTML =
+        '<div class="v-call ' + v.call + '">' + c[0] + '</div>' +
+        '<p class="v-why">' + c[1] + ' <b>' + v.count + ' of the ' + v.of + '</b> look-alike' + (v.of === 1 ? '' : 's') +
+          ' sell' + (v.count === 1 ? 's' : '') + ' well (Fast, Steady or sold out)' +
+          (v.of > 1 ? ', and the closest count the most.' : '.') + '</p>' +
+        '<div class="v-mix">' + mix + '</div>' +
+        '<dl class="v-nums">' +
+          '<div><dt>Sell at about</dt><dd>' + (v.perWeek == null ? '—' : n1(v.perWeek)) + '<small> a week</small></dd></div>' +
+          '<div><dt>Sold of what came in</dt><dd>' + (v.sellThrough == null ? '—' : Math.round(v.sellThrough * 100) + '%') + '</dd></div>' +
+        '</dl>' +
+        (outs.length ? '<p class="v-note">' + outs.length + ' you ruled out ' + (outs.length === 1 ? 'is' : 'are') + ' left out of this.</p>' : '') +
+        (v.close === 'loose'
+          ? '<p class="v-warn">Nothing in your shop looks very much like this one, so take this as a rough guide only.</p>'
+          : v.close === 'fair' ? '<p class="v-note">The matches are fair, not close: a guide, not a promise.</p>' : '');
+      $('qtyBox').classList.remove('hidden');
+      $('qtyBox').dataset.perWeek = v.perWeek || 0;
+      qty();
+    }
+
+    $('buyMatches').innerHTML = ds.map(function (d, i) { return card(d, i, false); }).join('') +
+      (spare > 0 ? '<button type="button" class="iconbtn bm-more" id="bmMore">Show another look-alike <span class="count">' + spare + '</span></button>' : '') +
+      (outs.length ? '<h3 class="bm-outhead">Ruled out</h3>' + outs.map(function (d) { return card(d, 0, true); }).join('') : '');
     $('buyFoot').textContent = 'Compared with the ' + n(tagged) + ' photographs of your sarees that carry a design code. ' +
       'Each saree’s numbers are its own design’s, from the stock desk. Your photograph was not saved.';
-    status('Compared. ' + ds.length + ' similar saree' + (ds.length === 1 ? '' : 's') + ' found.', 'ok');
-    $('buyResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (first) {
+      status(all.length ? 'Compared. ' + ds.length + ' similar saree' + (ds.length === 1 ? '' : 's') + ' found. Rule out any that do not look alike.' : 'Compared. Nothing similar with sales history.', all.length ? 'ok' : 'err');
+      $('buyResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      status(ds.length + ' look-alike' + (ds.length === 1 ? '' : 's') + ' counted' + (outs.length ? ', ' + outs.length + ' ruled out' : '') + '.', 'ok');
+    }
   }
+
+  // ruling out, putting back, asking for one more
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('[data-rm], [data-back], #bmMore');
+    if (!t || !last) return;
+    if (t.dataset.rm) removed[t.dataset.rm] = true;
+    else if (t.dataset.back) delete removed[t.dataset.back];
+    else extra++;
+    draw(false);
+  });
 
   function qty() {
     var per = +$('qtyBox').dataset.perWeek, q = Math.max(0, Math.round(+$('qty').value || 0));
