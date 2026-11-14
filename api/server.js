@@ -26,6 +26,7 @@
  *   POST similar       image body  -> photographs that look most like it
  *   POST task/looks?id=ID         describe one stored photograph's look
  *   POST looks/backfill           queue every photograph not yet described
+ *   POST photos/missing {ids}     which of these photographs are not stored
  *
  * Reading does not need anyone on the page. The page stores the photographs
  * and asks for them to be read; this service puts one Cloud Tasks task per
@@ -530,6 +531,15 @@ const server = http.createServer(async (req, res) => {
         }
       } else { todo.forEach(id => localEnqueue(id, 'looks')); queued = todo.length; }
       return send(res, 200, { photos: photos.length, described: have.size, queued, failed });
+    }
+
+    // which of these photographs are not actually stored? (a re-uploaded zip
+    // uses this to put back any that went missing)
+    if (route === 'photos/missing' && req.method === 'POST') {
+      const j = JSON.parse((await body(req)).toString('utf8') || '{}');
+      const ids = (Array.isArray(j.ids) ? j.ids : []).filter(id => typeof id === 'string' && ID.test(id));
+      const have = new Set((await store.list('photos/')).map(f => f.name.replace(/^photos\//, '')));
+      return send(res, 200, { missing: ids.filter(id => !have.has(id)) });
     }
 
     // a photograph taken at the market: which stored ones look most like it?
