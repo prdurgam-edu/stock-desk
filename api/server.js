@@ -117,11 +117,17 @@ function engine() {
 // one photograph at a time: the work is all CPU, and two at once only makes
 // each slower while doubling the memory
 let queue = Promise.resolve();
+const MAX_SIDE = 2000;
 function read(buffer) {
   const job = queue.then(async () => {
     const t = Date.now();
     const ocr = await engine();
-    const img = await ImageRaw.open(buffer);
+    // a phone camera's full 12-13 megapixels needs about 3 GB to read, more than
+    // the service has, and a tag reads just as well at 2,000 pixels a side
+    const small = await sharp(buffer).rotate()
+      .resize({ width: MAX_SIDE, height: MAX_SIDE, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 92 }).toBuffer();
+    const img = await ImageRaw.open(small);
     const r = await ocr.detect({ data: img.data, width: img.width, height: img.height });
     const lines = (r && r.texts || []).map(x => typeof x === 'string' ? x : (x && x.text) || '').filter(Boolean);
     return { lines, ms: Date.now() - t };
