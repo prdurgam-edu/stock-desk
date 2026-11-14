@@ -485,7 +485,7 @@ tr.sellmore{display:none}
   #filesDlg td{display:block;padding:0 !important;border:0 !important;min-width:0 !important;white-space:normal}
   #filesDlg td:first-child{grid-column:1/-1;font-weight:600}
   #filesDlg td:nth-child(4),#filesDlg td:nth-child(5),#filesDlg td:nth-child(6),#filesDlg td:nth-child(7){display:none}
-  #filesDlg td.rmcell{position:static;background:none;text-align:right}
+  #filesDlg td.rmcell{position:static;background:none;box-shadow:none;text-align:right}
   #filesDlg td.empty{grid-column:1/-1}
 
   /* the uploaded-files dialog uses the whole screen */
@@ -589,3 +589,13 @@ img.imgwait{visibility:hidden}
 .buy-sum{margin:0 0 12px;font-size:14px;color:var(--ink-2);line-height:1.8}
 .buy-sum b{color:var(--ink)}
 .nocopy-tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:4px;font-size:11px;font-family:var(--sans,inherit);background:var(--slow-s);color:var(--slow)}
+.files-msg{margin:0;padding:10px 14px;font-size:13px;line-height:1.5;border-bottom:1px solid var(--rule)}
+.files-msg.ok{background:var(--fast-s);color:var(--ink)}
+.files-msg.err{background:var(--dead-s);color:var(--ink)}
+.rmask.busy{font-style:italic}
+@media (max-width:700px){
+  /* fingers, not a mouse: Remove, Yes and Keep get room to be tapped */
+  #filesDlg .linkbtn{font-size:14px;min-height:40px;min-width:44px;padding:0 6px}
+  #filesDlg .rmask{font-size:14px}
+  #filesDlg .rmask .linkbtn{margin-left:4px}
+}

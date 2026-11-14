@@ -1026,8 +1026,12 @@
         cell.innerHTML = '<span class="rmask">Remove? ' +
           '<button type="button" class="linkbtn" data-yes>Yes</button> ' +
           '<button type="button" class="linkbtn keep" data-no>Keep</button></span>';
-        cell.querySelector('[data-yes]').addEventListener('click', function () { removeFile(id); });
+        cell.querySelector('[data-yes]').addEventListener('click', function () {
+          cell.innerHTML = '<span class="rmask busy">Removing\u2026</span>';
+          removeFile(id);
+        });
         cell.querySelector('[data-no]').addEventListener('click', renderFiles);
+        filesMsg('');
       });
     });
   }
@@ -1038,6 +1042,16 @@
      seller map then come out as if the removed file had never been loaded —
      which merged totals alone cannot do, since they no longer know which file
      contributed what. */
+  /* The outcome of a removal is said inside Uploaded files, where it was
+     asked: the page's own status line sits hidden behind the dialog. */
+  function filesMsg(text, kind) {
+    var el = $('filesMsg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'files-msg' + (text ? ' ' + (kind || 'ok') : ' hidden');
+    if (text) el.scrollIntoView({ block: 'nearest' });
+  }
+
   function removeFile(id) {
     var f = state.files.filter(function (x) { return x.id === id; })[0];
     if (!f) return;
@@ -1046,18 +1060,20 @@
     rebuildWithout(id).then(function (fresh) {
       state = fresh;
       return persistAndDraw().then(function () {
-        status('Removed ' + f.name + '. Everything recomputed from the ' + state.files.length +
-               ' file(s) that remain.', 'ok');
+        var done = 'Removed ' + f.name + '. Everything recomputed from the ' + state.files.length +
+               ' file(s) that remain.';
+        status(done, 'ok'); filesMsg(done, 'ok');
       });
     }).catch(function (e) {
       // nothing is removed unless every remaining file could be read again
       renderFiles();
       var miss = (e && e.missing) || [];
-      status(miss.length
+      var why = (miss.length
         ? 'Not removed. To recompute, every remaining file is read again, and the stored copy of ' +
           miss.join(', ') + (miss.length === 1 ? ' is' : ' are') + ' missing. Upload ' +
           (miss.length === 1 ? 'it again (it is not' : 'them again (none is') + ' counted twice), then remove ' + f.name + '.'
-        : 'Not removed: ' + ((e && e.message) || 'the files could not be read again') + '. Nothing was changed.', 'err');
+        : 'Not removed: ' + ((e && e.message) || 'the files could not be read again') + '. Nothing was changed.');
+      status(why, 'err'); filesMsg(why, 'err');
     });
   }
 
@@ -1414,7 +1430,7 @@
     wireDrop('dropZip', 'inZip', 'photo', /\.(zip|jpe?g|png|webp)$/i);
     $('computeBtn').addEventListener('click', compute);
 
-    $('filesBtn').addEventListener('click', function () { renderFiles(); $('filesDlg').showModal(); });
+    $('filesBtn').addEventListener('click', function () { filesMsg(''); renderFiles(); $('filesDlg').showModal(); });
     $('filesClose').addEventListener('click', function () { $('filesDlg').close(); });
     // two presses, four seconds apart at most: no confirm box, which embedded
     // previews block
