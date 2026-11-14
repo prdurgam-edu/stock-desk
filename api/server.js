@@ -154,19 +154,26 @@ async function describe(buffer) {
   const px = await img().resize(w, h, { fit: 'fill', kernel: 'linear' })
     .extract({ left: (w - 224) >> 1, top: (h - 224) >> 1, width: 224, height: 224 })
     .raw().toBuffer();
-  const x = new Float32Array(3 * 224 * 224);
+  // the look in colour, and the same picture in black and white: the second
+  // is the design alone (weave, print, border), whatever its colours
+  const lum = new Float32Array(224 * 224);
+  let lo = 1, hi = 0;
   for (let i = 0; i < 224 * 224; i++) {
-    for (let c = 0; c < 3; c++) x[c * 224 * 224 + i] = (px[i * 3 + c] / 255 - MEAN[c]) / STD[c];
+    const y = (0.299 * px[i * 3] + 0.587 * px[i * 3 + 1] + 0.114 * px[i * 3 + 2]) / 255;
+    lum[i] = y; if (y < lo) lo = y; if (y > hi) hi = y;
+  }
+  const span = hi - lo > 0.05 ? hi - lo : 1;
+  const x = new Float32Array(3 * 224 * 224), xg = new Float32Array(3 * 224 * 224);
+  for (let i = 0; i < 224 * 224; i++) {
+    const y = (lum[i] - (span === 1 ? 0 : lo)) / span;      // stretched, as a photo editor's auto-contrast
+    for (let c = 0; c < 3; c++) {
+      x[c * 224 * 224 + i] = (px[i * 3 + c] / 255 - MEAN[c]) / STD[c];
+      xg[c * 224 * 224 + i] = (y - MEAN[c]) / STD[c];
+    }
   }
   const sess = await looksModel();
-  const out = await sess.run({ [sess.inputNames[0]]: new Tensor('float32', x, [1, 3, 224, 224]) });
-  const v = out[sess.outputNames[0]].data;
-  let n = 0; for (let i = 0; i < v.length; i++) n += v[i] * v[i];
-  n = Math.sqrt(n) || 1;
-  // one signed byte per number, scaled to the largest
-  let m = 0; for (let i = 0; i < v.length; i++) m = Math.max(m, Math.abs(v[i] / n));
-  const q = new Int8Array(v.length);
-  for (let i = 0; i < v.length; i++) q[i] = Math.round((v[i] / n) / (m || 1) * 127);
+  const run = async t => (await sess.run({ [sess.inputNames[0]]: new Tensor('float32', t, [1, 3, 224, 224]) }))[sess.outputNames[0]].data;
+  const q = pack(await run(x)), g = pack(await run(xg));
   // colour: hue weighted by saturation in 18 bins, and white / grey / black
   const sm = await img().resize(96, 96, { fit: 'fill' }).raw().toBuffer();
   const hist = new Array(21).fill(0);
@@ -180,15 +187,33 @@ async function describe(buffer) {
     } else hist[18 + Math.min(2, Math.floor(mx * 3))] += 1;
   }
   const tot = hist.reduce((a, b) => a + b, 0) || 1;
-  return { q: Buffer.from(q.buffer).toString('base64'), c: hist.map(h => Math.round(h / tot * 1000)) };
+  return { q, g, c: hist.map(h => Math.round(h / tot * 1000)) };
 }
-// back to a unit vector, for comparing
-function unpack(d) {
-  const b = Buffer.from(d.q, 'base64'), q = new Int8Array(b.buffer, b.byteOffset, b.length);
+// a unit vector, one signed byte per number scaled to the largest, as base64
+function pack(v) {
+  let n = 0; for (let i = 0; i < v.length; i++) n += v[i] * v[i];
+  n = Math.sqrt(n) || 1;
+  let m = 0; for (let i = 0; i < v.length; i++) m = Math.max(m, Math.abs(v[i] / n));
+  const q = new Int8Array(v.length);
+  for (let i = 0; i < v.length; i++) q[i] = Math.round((v[i] / n) / (m || 1) * 127);
+  return Buffer.from(q.buffer).toString('base64');
+}
+// back to unit vectors, for comparing
+function vec(b64) {
+  const b = Buffer.from(b64, 'base64'), q = new Int8Array(b.buffer, b.byteOffset, b.length);
   const v = new Float32Array(q.length); let n = 0;
   for (let i = 0; i < q.length; i++) { v[i] = q[i]; n += q[i] * q[i]; }
   n = Math.sqrt(n) || 1; for (let i = 0; i < v.length; i++) v[i] /= n;
-  return { v, c: d.c.map(x => x / 1000) };
+  return v;
+}
+function unpack(d) { return { v: vec(d.q), g: d.g ? vec(d.g) : null, c: d.c.map(x => x / 1000) }; }
+function dot(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+function colourOverlap(a, b) { let s = 0; for (let i = 0; i < a.c.length; i++) s += Math.min(a.c[i], b.c[i]); return s; }
+// same design, other colours: alike in black and white, and the less alike
+// in colour the better
+function designLikeness(a, b) {
+  if (!a.g || !b.g) return null;
+  return dot(a.g, b.g) - 0.15 * colourOverlap(a, b);
 }
 function likeness(a, b) {
   let dot = 0; for (let i = 0; i < a.v.length; i++) dot += a.v[i] * b.v[i];
@@ -294,7 +319,8 @@ async function readTask(id) {
 
 const looksKey = id => 'looks/' + id + '.json';
 async function looksTask(id) {
-  if (await store.exists(looksKey(id))) return { already: true };
+  const had = await store.get(looksKey(id));
+  if (had) { try { if (JSON.parse(had.body.toString('utf8')).g) return { already: true }; } catch {} }
   const got = await store.get('photos/' + id);
   if (!got) return { missing: true };
   let d;
@@ -520,7 +546,9 @@ const server = http.createServer(async (req, res) => {
     // every stored photograph without a description gets one, in the background
     if (route === 'looks/backfill' && req.method === 'POST') {
       const photos = (await store.list('photos/')).map(f => f.name.replace(/^photos\//, '')).filter(id => ID.test(id));
-      const have = new Set((await store.list('looks/')).map(f => f.name.replace(/^looks\//, '').replace(/\.json$/, '')));
+      // described, and with the black-and-white description too
+      const have = new Set((await store.list('looks/')).filter(f => f.meta && f.meta.l && f.meta.l.indexOf('"g":') >= 0)
+        .map(f => f.name.replace(/^looks\//, '').replace(/\.json$/, '')));
       const todo = photos.filter(id => !have.has(id));
       let queued = 0, failed = 0;
       if (TASKS_QUEUE) {
@@ -550,9 +578,13 @@ const server = http.createServer(async (req, res) => {
       const t = Date.now();
       const q = unpack(await describe(buf));
       const all = await allLooks();
-      const scored = all.map(d => ({ id: d.id, score: Math.round(likeness(q, d) * 1000) / 1000 }))
+      const r3 = x => Math.round(x * 1000) / 1000;
+      const scored = all.map(d => ({ id: d.id, score: r3(likeness(q, d)) }))
         .sort((a, b) => b.score - a.score).slice(0, 80);
-      return send(res, 200, { matches: scored, compared: all.length, ms: Date.now() - t });
+      const design = all.map(d => ({ id: d.id, score: designLikeness(q, d), colour: r3(colourOverlap(q, d)) }))
+        .filter(d => d.score != null).map(d => ({ ...d, score: r3(d.score) }))
+        .sort((a, b) => b.score - a.score).slice(0, 120);
+      return send(res, 200, { matches: scored, design, compared: all.length, ms: Date.now() - t });
     }
 
     if (route === 'reads' && req.method === 'GET') {
