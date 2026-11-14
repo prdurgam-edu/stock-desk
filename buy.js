@@ -318,7 +318,7 @@
   // ruling out, putting back, asking for one more (m: the look-alikes, d: same design)
   document.addEventListener('click', function (e) {
     var t = e.target.closest && e.target.closest('[data-rm], [data-back], #bmMore, #bmMoreD');
-    if (!t || !last) return;
+    if (!t || !last || !t.closest('#tabBuy')) return;   // the files list has Remove buttons too
     var k = t.dataset.rm || t.dataset.back || '', set = k.slice(0, 2) === 'd:' ? removedD : removed;
     k = k.slice(2);
     if (t.dataset.rm) set[k] = true;

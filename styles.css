@@ -588,3 +588,4 @@ img.imgwait{visibility:hidden}
 .buy-sub{margin:-4px 0 10px;color:var(--ink-3);font-size:13.5px;line-height:1.5;max-width:62ch}
 .buy-sum{margin:0 0 12px;font-size:14px;color:var(--ink-2);line-height:1.8}
 .buy-sum b{color:var(--ink)}
+.nocopy-tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:4px;font-size:11px;font-family:var(--sans,inherit);background:var(--slow-s);color:var(--slow)}

@@ -490,10 +490,11 @@ reads the others again and rebuilds from them: totals, stock on hand and the
 seller map come out exactly as if the removed file had never been loaded.
 Photographs and their codes are untouched.
 
-Files uploaded before this version were stored without a link back to their
-record, so they cannot be read again. Removing one of those works on the merged
-totals instead and tells you if anything needs uploading again. Uploading those
-workbooks once more makes them fully removable.
+Removing always recomputes from the files themselves, never from figures saved
+earlier. If the stored copy of any remaining file is missing (Uploaded files
+marks it **stored copy missing**), nothing is removed and the page says which
+file to upload again. Uploading it again is safe: it is recognised as already
+loaded, is not counted twice, and its stored copy is put back.
 
 **Clear everything** asks for a second press within four seconds rather than a
 pop-up — browsers block pop-ups inside embedded previews, which is why the
