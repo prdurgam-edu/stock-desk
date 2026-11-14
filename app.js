@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-14b';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-14c';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -1043,21 +1043,26 @@
       state = fresh;
       return persistAndDraw().then(function () {
         status('Removed ' + f.name + '. Everything recomputed from the ' + state.files.length +
-               ' file(s) that remain.', 'ok');
+               ' file(s) that remain.' + (lostRaw ? ' ' + lostRaw + ' of them could not be fetched again, so ' +
+               (lostRaw === 1 ? 'its' : 'their') + ' figures were kept from the history; upload ' +
+               (lostRaw === 1 ? 'it' : 'them') + ' again to store ' + (lostRaw === 1 ? 'it' : 'them') + ' afresh.' : ''), 'ok');
       });
     }).catch(function () { return legacyRemove(f); });
   }
 
+  var lostRaw = 0;   // workbooks the last rebuild could not fetch again
   function rebuildWithout(id) {
     var keep = state.files.filter(function (x) { return x.id !== id; });
-    if (!Store.backend.getRaw || keep.some(function (x) { return !x.rawId; })) return Promise.resolve(null);
+    var gone = state.files.filter(function (x) { return x.id === id; })[0];
+    if (!Store.backend.getRaw) return Promise.resolve(null);
 
     // one workbook can have given several sheets; read each workbook once, in upload order
     var groups = [], byRaw = {};
     keep.slice().sort(function (a, b) { return a.addedAt < b.addedAt ? -1 : a.addedAt > b.addedAt ? 1 : 0; })
       .forEach(function (x) {
-        if (!byRaw[x.rawId]) { byRaw[x.rawId] = { rawId: x.rawId, name: x.name, recs: [] }; groups.push(byRaw[x.rawId]); }
-        byRaw[x.rawId].recs.push(x);
+        var k = x.rawId || ('none:' + x.id);
+        if (!byRaw[k]) { byRaw[k] = { rawId: x.rawId, name: x.name, recs: [] }; groups.push(byRaw[k]); }
+        byRaw[k].recs.push(x);
       });
 
     var fresh = Store.blankState();
@@ -1066,25 +1071,63 @@
     fresh.photos = state.photos || [];
     Object.keys(state).forEach(function (k) { if (!(k in fresh)) fresh[k] = state[k]; });
     fresh.photos.forEach(function (p) { p.batchIsSeller = null; });   // the seller list may change
+    var old = state, lost = 0;
+
+    /* A workbook that cannot be fetched again (lost from storage) is not read:
+       what it gave is taken from the history as it stands instead. That is
+       exact for everything except the seller map, which is merged across the
+       full-period exports; so it is kept as it was, unless the file removed is
+       itself a full-period export. */
+    function fromHistory(rec) {
+      if (rec.kind === 'daily') {
+        if (old.days[rec.from]) fresh.days[rec.from] = old.days[rec.from];
+        var lb = old.latest && old.latest.date === rec.from && Object.keys(old.latest.bal || {}).length ? old.latest.bal : null;
+        if (lb && (!fresh.latest || rec.from >= fresh.latest.date)) fresh.latest = { date: rec.from, bal: lb };
+      } else {
+        var c = old.cumulative;
+        if (c && c.from === rec.from && c.to === rec.to && (c.asOf || c.to) === (rec.asOf || rec.to)) {
+          var newer = !fresh.cumulative || c.asOf > fresh.cumulative.asOf ||
+                      (c.asOf === fresh.cumulative.asOf && c.to > fresh.cumulative.to);
+          if (newer) fresh.cumulative = c;
+          if (!fresh.latest || c.asOf > fresh.latest.date) {
+            var b = {};
+            Object.keys(c.rows).forEach(function (k) { if (c.rows[k].bal) b[k] = c.rows[k].bal; });
+            fresh.latest = { date: c.asOf, bal: b };
+          }
+        }
+      }
+      var r = {}; Object.keys(rec).forEach(function (k) { r[k] = rec[k]; });
+      fresh.files.push(r);
+    }
 
     return groups.reduce(function (chain, g) {
       return chain.then(function () {
-        return Store.backend.getRaw(g.rawId, g.name).then(function (blob) {
-          if (!blob) throw new Error('missing');
-          return new Response(blob).arrayBuffer();
-        }).then(function (buf) {
-          var sheets = Compute.parseWorkbook(new Uint8Array(buf), g.name);
-          g.recs.forEach(function (rec) {
-            var sh = sheets.filter(function (x) {
-              return x.sheet === rec.sheet && x.kind === rec.kind && x.from === rec.from && x.to === rec.to;
-            })[0];   // one workbook holds each sheet once, so this is the one
-            if (!sh) throw new Error('sheet');
-            Compute.ingest(fresh, sh, { id: rec.id, name: rec.name, size: rec.size, rawId: rec.rawId, modified: rec.modified || null });
-            fresh.files[fresh.files.length - 1].addedAt = rec.addedAt;   // still uploaded when it was
+        var got = g.rawId ? Store.backend.getRaw(g.rawId, g.name).catch(function () { return null; }) : Promise.resolve(null);
+        return got.then(function (blob) {
+          if (!blob) { lost++; g.recs.forEach(fromHistory); return; }
+          return new Response(blob).arrayBuffer().then(function (buf) {
+            var sheets = Compute.parseWorkbook(new Uint8Array(buf), g.name);
+            g.recs.forEach(function (rec) {
+              var sh = sheets.filter(function (x) {
+                return x.sheet === rec.sheet && x.kind === rec.kind && x.from === rec.from && x.to === rec.to;
+              })[0];   // one workbook holds each sheet once, so this is the one
+              if (!sh) return fromHistory(rec);
+              Compute.ingest(fresh, sh, { id: rec.id, name: rec.name, size: rec.size, rawId: rec.rawId, modified: rec.modified || null });
+              fresh.files[fresh.files.length - 1].addedAt = rec.addedAt;   // still uploaded when it was
+            });
           });
         });
       });
-    }, Promise.resolve()).then(function () { return fresh; });
+    }, Promise.resolve()).then(function () {
+      if (lost) {
+        // the seller map and design names of a lost workbook live only in the history
+        if (gone && gone.kind === 'master') return null;
+        Object.keys(old.sellers || {}).forEach(function (k) { if (!fresh.sellers[k]) fresh.sellers[k] = old.sellers[k]; });
+        Object.keys(old.refs || {}).forEach(function (k) { if (!fresh.refs[k]) fresh.refs[k] = old.refs[k]; });
+      }
+      lostRaw = lost;
+      return fresh;
+    });
   }
 
   /* Files uploaded before workbooks were kept against their record cannot be
@@ -1097,8 +1140,16 @@
       delete state.days[f.from];
       var ds = Object.keys(state.days).sort();
       if (state.latest && state.latest.date === f.from) {
-        state.latest = ds.length ? { date: ds[ds.length - 1], bal: {} } : null;
-        msg += ' The stock-on-hand figures came from that file ' + MDASH + ' upload the latest day again.'; kind = 'err';
+        var c = state.cumulative, last = ds[ds.length - 1];
+        if (c && (!last || (c.asOf || c.to) >= last)) {
+          // the full-period export is the newest stock count left: use its balance
+          var b = {};
+          Object.keys(c.rows || {}).forEach(function (k) { if (c.rows[k].bal) b[k] = c.rows[k].bal; });
+          state.latest = { date: c.asOf || c.to, bal: b };
+        } else {
+          state.latest = ds.length ? { date: last, bal: {} } : null;
+          msg += ' The stock-on-hand figures came from that file ' + MDASH + ' upload the latest day again.'; kind = 'err';
+        }
       }
     } else {
       var others = state.files.filter(function (x) { return x.kind === 'master'; });
@@ -1600,6 +1651,17 @@
       // here, from filename times alone, without reading anything again
       if (linkPieces() || found) Store.backend.save(state).catch(function () {});
       renderFiles(); render();
+      /* An earlier removal could leave today's stock empty (a workbook it needed
+         was missing). Rebuild once from the files on record to put it right. */
+      if (state.files.length && state.latest && !Object.keys(state.latest.bal || {}).length) {
+        rebuildWithout(null).then(function (fresh) {
+          if (!fresh || !fresh.latest || !Object.keys(fresh.latest.bal || {}).length) return;
+          state = fresh;
+          return persistAndDraw().then(function () {
+            status('Stock on hand rebuilt from the ' + state.files.length + ' file(s) on record.', 'ok');
+          });
+        }).catch(function () {});
+      }
       status(state.files.length
         ? 'Ready. ' + state.files.length + ' file(s) on record in ' + Store.label + '.'
         : 'Ready. Add today\'s stock report to begin.', 'ok');
