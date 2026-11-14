@@ -1015,7 +1015,7 @@
         f.filter(function (x) { return x.kind === 'master'; }).length + ' full-period. Stored in ' + Store.label + '.' +
         (missingCopies.length ? ' Removing a file recomputes from every other file, so first upload again: ' +
           missingCopies.filter(function (x, i) { return missingCopies.indexOf(x) === i; }).join(', ') +
-          (missingCopies.length === 1 ? ' (it is' : ' (none is') + ' counted twice).' : '')
+          (missingCopies.length === 1 ? ' (it is not' : ' (none is') + ' counted twice).' : '')
       : 'Stored in ' + Store.label + '.';
 
     // Asked on the page, not with the browser's confirm box: that box is
