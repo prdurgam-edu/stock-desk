@@ -26,7 +26,7 @@
   var MAX = 5;            // designs shown
   var state = null, A = null, lines = {}, photos = {}, last = null, tagged = 0;
   var removed = {}, extra = 0;   // look-alikes you ruled out; how many more you asked to see
-  var lastD = null, removedD = {}, extraD = 0;   // the same, for "same design, other colours"
+  var lastD = null, removedD = {};   // the same, for "same design, other colours" (a fixed five at most)
 
   function n(v) { return (v == null ? 0 : Math.round(v)).toLocaleString('en-IN'); }
   function n1(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toLocaleString('en-IN'); }
@@ -136,8 +136,13 @@
         return;
       }
       last = designsFrom(j.matches);
-      lastD = designsFrom(j.design || [], true);
-      removedD = {}; extraD = 0;
+      // fixed once, here: the very close designs not already among the first
+      // five look-alikes. Ruling one out only takes it away; nothing new comes in.
+      var firstFive = {}; last.slice(0, MAX).forEach(function (d) { firstFive[d.key] = true; });
+      lastD = designsFrom(j.design || [], true)
+        .filter(function (d) { return !firstFive[d.key] && shapeOf(d) >= VERY_CLOSE && (d.colour || 0) < 0.7; })
+        .slice(0, MAX);
+      removedD = {};
       removed = {}; extra = 0;
       draw(true);
     }).catch(function (e) {
@@ -169,10 +174,7 @@
     var best = list[0].score;
     // close company only: far behind the best, or simply unalike, is not "looks like it"
     // a few spare beyond five, to stand in for any you rule out
-    if (byDesign) {
-      // design scores run lower: black and white, less any colour shared
-      return list.filter(function (d) { return d.score >= Math.max(best - 0.15, 0.45); }).slice(0, MAX + 15);
-    }
+    if (byDesign) return list;   // narrowed by the caller, to the very close only
     return list.filter(function (d) { return d.score >= Math.max(best - 0.15, 0.6); }).slice(0, MAX + 10);
   }
 
@@ -214,13 +216,17 @@
     return (last || []).filter(function (d) { return !removed[d.key]; }).slice(0, MAX + extra);
   }
 
+  /* How alike the design is in black and white, before the small discount for
+     sharing colours: 0.75 and over looks like the same design by eye. */
+  var VERY_CLOSE = 0.75;
+  function shapeOf(d) { return d.score + 0.15 * (d.colour || 0); }
+
   function card(d, i, out, kind) {
     var l = d.line, w = l.cover == null ? (l.bal > 0 ? 'never at this pace' : '—') : Math.round(l.cover) + ' weeks';
     var strength, tag = kind === 'd' ? 'd:' : 'm:';
     if (kind === 'd') {
-      var shape = d.score + 0.15 * (d.colour || 0);   // the design alone, before the colour discount
-      strength = (shape >= 0.8 ? 'Very close design' : shape >= 0.7 ? 'Close design' : 'Similar design') +
-        ((d.colour || 0) < 0.5 ? ', other colours' : (d.colour || 0) < 0.7 ? ', some colours shared' : ', same colours');
+      strength = (shapeOf(d) >= 0.8 ? 'Same design' : 'Very close design') +
+        ((d.colour || 0) < 0.5 ? ', other colours' : ', some colours shared');
     } else strength = d.score >= 0.8 ? 'Very close' : d.score >= 0.72 ? 'Close' : 'Similar';
     var pic = API + '/api/blob/' + encodeURIComponent(d.photo);
     return '<article class="bm ' + l.status + (out ? ' out' : '') + '">' +
@@ -281,7 +287,7 @@
     $('buyMatches').innerHTML = ds.map(function (d, i) { return card(d, i, false, 'm'); }).join('') +
       (spare > 0 ? '<button type="button" class="iconbtn bm-more" id="bmMore">Show another look-alike <span class="count">' + spare + '</span></button>' : '') +
       (outs.length ? '<h3 class="bm-outhead">Ruled out</h3>' + outs.map(function (d) { return card(d, 0, true, 'm'); }).join('') : '');
-    drawDesign(ds);
+    drawDesign();
     $('buyFoot').textContent = 'Compared with the ' + n(tagged) + ' photographs of your sarees that carry a design code. ' +
       'Each saree’s numbers are its own design’s, from the stock desk. Your photograph was not saved.';
     if (first) {
@@ -295,14 +301,12 @@
   /* Same design, other colours: compared in black and white, so colour plays no
      part, and those that share its colours count a little less. A design already
      counted above is left out here. Its own vote, kept apart from the one above. */
-  function drawDesign(top) {
-    var above = {}; top.forEach(function (d) { above[d.key] = true; });
-    var all = (lastD || []).filter(function (d) { return !above[d.key]; });
-    var keep = all.filter(function (d) { return !removedD[d.key]; });
-    var ds = keep.slice(0, MAX + extraD), outs = all.filter(function (d) { return removedD[d.key]; });
-    var spare = keep.length - ds.length;
+  function drawDesign() {
+    var all = lastD || [];
+    var ds = all.filter(function (d) { return !removedD[d.key]; }), outs = all.filter(function (d) { return removedD[d.key]; });
     if (!ds.length) {
-      $('designSum').innerHTML = '<p class="muted">' + (all.length ? 'You ruled out every one. Put one back below.' : 'Nothing else in your shop shares this design.') + '</p>';
+      $('designSum').innerHTML = '<p class="muted">' + (all.length ? 'You ruled out every one. Put one back below.'
+        : 'No saree in your shop has a very close design in other colours.') + '</p>';
     } else {
       var v = verdictOf(ds);
       $('designSum').innerHTML = '<span class="pill ' + (v.call === 'buy' ? 'fast' : v.call === 'some' ? 'steady' : 'slow') + '">' + CALL[v.call][0] + '</span> ' +
@@ -311,19 +315,18 @@
         (v.sellThrough != null ? ' · ' + Math.round(v.sellThrough * 100) + '% of what came in sold' : '');
     }
     $('designMatches').innerHTML = ds.map(function (d, i) { return card(d, i, false, 'd'); }).join('') +
-      (spare > 0 ? '<button type="button" class="iconbtn bm-more" id="bmMoreD">Show another <span class="count">' + spare + '</span></button>' : '') +
       (outs.length ? '<h3 class="bm-outhead">Ruled out</h3>' + outs.map(function (d) { return card(d, 0, true, 'd'); }).join('') : '');
   }
 
+
   // ruling out, putting back, asking for one more (m: the look-alikes, d: same design)
   document.addEventListener('click', function (e) {
-    var t = e.target.closest && e.target.closest('[data-rm], [data-back], #bmMore, #bmMoreD');
+    var t = e.target.closest && e.target.closest('[data-rm], [data-back], #bmMore');
     if (!t || !last || !t.closest('#tabBuy')) return;   // the files list has Remove buttons too
     var k = t.dataset.rm || t.dataset.back || '', set = k.slice(0, 2) === 'd:' ? removedD : removed;
     k = k.slice(2);
     if (t.dataset.rm) set[k] = true;
     else if (t.dataset.back) delete set[k];
-    else if (t.id === 'bmMoreD') extraD++;
     else extra++;
     draw(false);
   });

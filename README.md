@@ -370,10 +370,10 @@ buying, and the page shows:
   closer ones counting more, and the pace sarees like it sell at;
 - **how long a quantity would take to sell**: type how many pieces you are
   thinking of, and it says how many weeks or months that is at that pace;
-- below them, **Same design, other colours**: up to five more sarees whose
-  weave, print, embroidery or border look like it whatever their colour, with
-  their own short tally of how many sell well and how fast. Useful when the
-  design is what sells.
+- below them, **Same design, other colours**: at most five sarees in other
+  colours whose weave, print, embroidery or border is very close to it, with
+  their own short tally of how many sell well and how fast. Ruling one out
+  there only takes it away; no other saree takes its place.
 
 Any saree in either list you feel is not a match can be ruled out with its
 **✕** button; the tally under it changes at once, the next closest takes its
