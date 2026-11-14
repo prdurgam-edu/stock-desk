@@ -24,7 +24,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var LBL = { fast: 'Fast', steady: 'Steady', slow: 'Slow', dead: 'Dead', soldout: 'Sold out' };
   var MAX = 5;            // designs shown
-  var state = null, A = null, lines = {}, photos = {}, last = null;
+  var state = null, A = null, lines = {}, photos = {}, last = null, tagged = 0;
 
   function n(v) { return (v == null ? 0 : Math.round(v)).toLocaleString('en-IN'); }
   function n1(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toLocaleString('en-IN'); }
@@ -52,7 +52,7 @@
       A = Compute.analyse(state, { slowAfterWeeks: CFG.slowAfterWeeks || 26, fastUnderWeeks: CFG.fastUnderWeeks || 8 });
       A.lines.forEach(function (l) { lines[l.key] = l; });
       (state.photos || []).forEach(function (p) { photos[p.id] = p; });
-      var tagged = (state.photos || []).filter(function (p) { return p.designKey && !p.unmapped; }).length;
+      tagged = (state.photos || []).filter(function (p) { return p.designKey && !p.unmapped; }).length;
       lock(false);
       status(tagged
         ? 'Ready. ' + n(tagged) + ' photographs of your sarees to compare against.'
@@ -188,7 +188,7 @@
         '<p>None of the photographs it resembles carries a design code yet, so there are no sales to go on.</p>';
       $('qtyBox').classList.add('hidden');
       $('matches').innerHTML = '';
-      $('foot').textContent = 'Compared with ' + n(compared) + ' photographs.';
+      $('foot').textContent = 'Compared with the ' + n(tagged) + ' photographs that carry a design code.';
       status('Compared. Nothing similar with sales history.', 'err');
       return;
     }
@@ -231,7 +231,7 @@
           '</dl>' +
         '</div></article>';
     }).join('');
-    $('foot').textContent = 'Compared with ' + n(compared) + ' photographs of your sarees. ' +
+    $('foot').textContent = 'Compared with the ' + n(tagged) + ' photographs of your sarees that carry a design code. ' +
       'Each saree’s numbers are its own design’s, from the stock desk. Your photograph was not saved.';
     status('Compared. ' + ds.length + ' similar saree' + (ds.length === 1 ? '' : 's') + ' found.', 'ok');
     $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
