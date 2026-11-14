@@ -23,6 +23,9 @@
  *   POST process      {ids}       read these photographs in the background
  *   POST task/read?id=ID          one background read (called by Cloud Tasks)
  *   GET  reads                    every reading done so far, for the page
+ *   POST similar       image body  -> photographs that look most like it
+ *   POST task/looks?id=ID         describe one stored photograph's look
+ *   POST looks/backfill           queue every photograph not yet described
  *
  * Reading does not need anyone on the page. The page stores the photographs
  * and asks for them to be read; this service puts one Cloud Tasks task per
@@ -52,7 +55,7 @@ import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { InferenceSession } from 'onnxruntime-node';
+import { InferenceSession, Tensor } from 'onnxruntime-node';
 import BaseOcr, { registerBackend, ImageRawBase, FileUtilsBase } from '@gutenye/ocr-common';
 import { splitIntoLineImages } from '@gutenye/ocr-common/splitIntoLineImages';
 
@@ -124,6 +127,72 @@ function read(buffer) {
   });
   queue = job.catch(() => {});
   return job;
+}
+
+/* ---------------- what a saree looks like ----------------
+   For "Should I buy?": every stored photograph is described by 2,048 numbers
+   from ResNet-50 (cut at its pooling layer, built by make_features.py)
+   plus a 21-bin colour histogram. A new photograph is described the same way
+   and compared with all of them. Kept small: the numbers are stored as one
+   byte each, so a description fits in an object's metadata and one listing
+   brings back all of them. */
+const LOOKS_MODEL = path.join(MODELS, 'looks.onnx');
+const MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225];
+let looksPromise = null;
+function looksModel() {
+  if (!looksPromise) looksPromise = InferenceSession.create(LOOKS_MODEL).catch(e => { looksPromise = null; throw e; });
+  return looksPromise;
+}
+async function describe(buffer) {
+  // upright pixels first, so every later step sees the photograph as taken
+  const up = await sharp(buffer).rotate().removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const img = () => sharp(up.data, { raw: { width: up.info.width, height: up.info.height, channels: up.info.channels } });
+  const w0 = up.info.width, h0 = up.info.height;
+  // the model's own view: shortest side to 256, the middle 224 x 224
+  const k = 256 / Math.min(w0, h0), w = Math.max(224, Math.round(w0 * k)), h = Math.max(224, Math.round(h0 * k));
+  const px = await img().resize(w, h, { fit: 'fill', kernel: 'linear' })
+    .extract({ left: (w - 224) >> 1, top: (h - 224) >> 1, width: 224, height: 224 })
+    .raw().toBuffer();
+  const x = new Float32Array(3 * 224 * 224);
+  for (let i = 0; i < 224 * 224; i++) {
+    for (let c = 0; c < 3; c++) x[c * 224 * 224 + i] = (px[i * 3 + c] / 255 - MEAN[c]) / STD[c];
+  }
+  const sess = await looksModel();
+  const out = await sess.run({ [sess.inputNames[0]]: new Tensor('float32', x, [1, 3, 224, 224]) });
+  const v = out[sess.outputNames[0]].data;
+  let n = 0; for (let i = 0; i < v.length; i++) n += v[i] * v[i];
+  n = Math.sqrt(n) || 1;
+  // one signed byte per number, scaled to the largest
+  let m = 0; for (let i = 0; i < v.length; i++) m = Math.max(m, Math.abs(v[i] / n));
+  const q = new Int8Array(v.length);
+  for (let i = 0; i < v.length; i++) q[i] = Math.round((v[i] / n) / (m || 1) * 127);
+  // colour: hue weighted by saturation in 18 bins, and white / grey / black
+  const sm = await img().resize(96, 96, { fit: 'fill' }).raw().toBuffer();
+  const hist = new Array(21).fill(0);
+  for (let i = 0; i < sm.length; i += 3) {
+    const r = sm[i] / 255, g = sm[i + 1] / 255, b = sm[i + 2] / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, sat = mx ? d / mx : 0;
+    if (sat > 0.2) {
+      let hue = d === 0 ? 0 : mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      hue = ((hue * 60) + 360) % 360;
+      hist[Math.floor(hue / 20) % 18] += sat;
+    } else hist[18 + Math.min(2, Math.floor(mx * 3))] += 1;
+  }
+  const tot = hist.reduce((a, b) => a + b, 0) || 1;
+  return { q: Buffer.from(q.buffer).toString('base64'), c: hist.map(h => Math.round(h / tot * 1000)) };
+}
+// back to a unit vector, for comparing
+function unpack(d) {
+  const b = Buffer.from(d.q, 'base64'), q = new Int8Array(b.buffer, b.byteOffset, b.length);
+  const v = new Float32Array(q.length); let n = 0;
+  for (let i = 0; i < q.length; i++) { v[i] = q[i]; n += q[i] * q[i]; }
+  n = Math.sqrt(n) || 1; for (let i = 0; i < v.length; i++) v[i] /= n;
+  return { v, c: d.c.map(x => x / 1000) };
+}
+function likeness(a, b) {
+  let dot = 0; for (let i = 0; i < a.v.length; i++) dot += a.v[i] * b.v[i];
+  let col = 0; for (let i = 0; i < a.c.length; i++) col += Math.min(a.c[i], b.c[i]);
+  return 0.8 * dot + 0.2 * col;     // weighed on the shop's own photographs
 }
 
 /* ---------------- where things are kept ---------------- */
@@ -217,7 +286,40 @@ async function readTask(id) {
   // there almost always, and then one listing returns every reading
   const meta = json.length < 7000 ? { r: json } : { big: '1' };
   await store.put(readKey(id), Buffer.from(json), 'application/json', meta);
+  // and its look, for "Should I buy?"; a failure here never fails the read
+  await looksTask(id).catch(e => console.error('looks', id, e.message));
   return { read: true, lines: rec.lines.length };
+}
+
+const looksKey = id => 'looks/' + id + '.json';
+async function looksTask(id) {
+  if (await store.exists(looksKey(id))) return { already: true };
+  const got = await store.get('photos/' + id);
+  if (!got) return { missing: true };
+  let d;
+  try { d = await describe(got.body); }
+  catch (e) {
+    if (!/unsupported image|Input buffer|corrupt|VipsJpeg|Invalid/i.test(String(e && e.message))) throw e;
+    return { unreadable: true };
+  }
+  const json = JSON.stringify(d);
+  await store.put(looksKey(id), Buffer.from(json), 'application/json', { l: json });
+  looksCache = null;
+  return { described: true };
+}
+// every description, kept in memory for a minute: comparing is then instant
+let looksCache = null;
+async function allLooks() {
+  if (looksCache && Date.now() - looksCache.at < 60000) return looksCache.list;
+  const list = [];
+  for (const f of await store.list('looks/')) {
+    const id = f.name.replace(/^looks\//, '').replace(/\.json$/, '');
+    let d = null;
+    try { d = JSON.parse(f.meta && f.meta.l ? f.meta.l : (await store.get(f.name)).body.toString('utf8')); } catch {}
+    if (d) list.push({ id, ...unpack(d) });
+  }
+  looksCache = { at: Date.now(), list };
+  return list;
 }
 
 let tokenCache = null;
@@ -233,14 +335,15 @@ async function token() {
 
 // one task per photograph. The name keeps a photograph from being queued twice
 // in the same hour if the page asks again.
-async function enqueue(base, id) {
+async function enqueue(base, id, kind) {
   const hour = new Date().toISOString().slice(0, 13).replace(/\D/g, '');
-  const name = TASKS_QUEUE + '/tasks/r-' + id.replace(/[^A-Za-z0-9_-]/g, '_') + '-' + hour;
+  const what = kind === 'looks' ? 'looks' : 'read';
+  const name = TASKS_QUEUE + '/tasks/' + (what === 'looks' ? 'l-' : 'r-') + id.replace(/[^A-Za-z0-9_-]/g, '_') + '-' + hour;
   const r = await fetch('https://cloudtasks.googleapis.com/v2/' + TASKS_QUEUE + '/tasks', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + await token(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ task: { name, dispatchDeadline: '300s', httpRequest: {
-      httpMethod: 'POST', url: base + '/api/task/read?id=' + encodeURIComponent(id) } } })
+      httpMethod: 'POST', url: base + '/api/task/' + what + '?id=' + encodeURIComponent(id) } } })
   });
   if (r.status === 409) return 'already';
   if (!r.ok) throw new Error('Cloud Tasks said ' + r.status + ': ' + (await r.text()).slice(0, 200));
@@ -249,15 +352,19 @@ async function enqueue(base, id) {
 
 // without a queue (testing on one machine): the same work, in this process
 const localQueue = []; let localBusy = false;
-function localEnqueue(id) {
-  if (!localQueue.includes(id)) localQueue.push(id);
+function localEnqueue(id, kind) {
+  const job = (kind === 'looks' ? 'looks:' : '') + id;
+  if (!localQueue.includes(job)) localQueue.push(job);
   if (localBusy) return;
   localBusy = true;
   (async () => {
     while (localQueue.length) {
       const next = localQueue.shift();
       for (let attempt = 0; attempt < 3; attempt++) {
-        try { await readTask(next); break; } catch (e) { console.error('read', next, e.message); }
+        try {
+          if (next.startsWith('looks:')) await looksTask(next.slice(6)); else await readTask(next);
+          break;
+        } catch (e) { console.error('task', next, e.message); }
       }
     }
     localBusy = false;
@@ -401,6 +508,41 @@ const server = http.createServer(async (req, res) => {
       const id = url.searchParams.get('id') || '';
       if (!ID.test(id)) return send(res, 200, { skipped: 'bad id' });   // 200: nothing to retry
       return send(res, 200, await readTask(id));
+    }
+
+    if (route === 'task/looks' && req.method === 'POST') {
+      const id = url.searchParams.get('id') || '';
+      if (!ID.test(id)) return send(res, 200, { skipped: 'bad id' });
+      return send(res, 200, await looksTask(id));
+    }
+
+    // every stored photograph without a description gets one, in the background
+    if (route === 'looks/backfill' && req.method === 'POST') {
+      const photos = (await store.list('photos/')).map(f => f.name.replace(/^photos\//, '')).filter(id => ID.test(id));
+      const have = new Set((await store.list('looks/')).map(f => f.name.replace(/^looks\//, '').replace(/\.json$/, '')));
+      const todo = photos.filter(id => !have.has(id));
+      let queued = 0, failed = 0;
+      if (TASKS_QUEUE) {
+        const base = process.env.SELF_URL || ('https://' + req.headers.host);
+        for (let i = 0; i < todo.length; i += 60) {
+          const r = await Promise.allSettled(todo.slice(i, i + 60).map(id => enqueue(base, id, 'looks')));
+          r.forEach(x => { if (x.status === 'fulfilled') queued++; else { failed++; console.error(x.reason); } });
+        }
+      } else { todo.forEach(id => localEnqueue(id, 'looks')); queued = todo.length; }
+      return send(res, 200, { photos: photos.length, described: have.size, queued, failed });
+    }
+
+    // a photograph taken at the market: which stored ones look most like it?
+    // It is compared, never stored.
+    if (route === 'similar' && req.method === 'POST') {
+      const buf = await body(req);
+      if (!buf.length) return send(res, 400, { error: 'no image' });
+      const t = Date.now();
+      const q = unpack(await describe(buf));
+      const all = await allLooks();
+      const scored = all.map(d => ({ id: d.id, score: Math.round(likeness(q, d) * 1000) / 1000 }))
+        .sort((a, b) => b.score - a.score).slice(0, 80);
+      return send(res, 200, { matches: scored, compared: all.length, ms: Date.now() - t });
     }
 
     if (route === 'reads' && req.method === 'GET') {
