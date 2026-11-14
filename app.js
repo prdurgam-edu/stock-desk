@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-14d';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-14e';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -871,6 +871,7 @@
      while it is. */
   var cloudReading = !!(Store.backend && Store.backend.process);
   var restoredPhotos = 0;      // pictures put back from a re-uploaded zip, this Compute
+  var restoredRaw = 0;         // stored workbook copies put back by uploading them again, this Compute
   var readsCache = {}, readsSince = '', pollTimer = null, wasWaiting = 0;
 
   function isWaiting(p) { return isPending(p) && !!p.queuedAt && !readsCache[p.id]; }
@@ -945,13 +946,14 @@
         renderPhotos(); renderLines();
       }
       if (left) {
+        // said beside the photographs, not in the status line: the dashboard
+        // itself is computed and ready while tags are still being read
         $('matchProg').textContent = readingNote(left);
-        status(readingNote(left), 'busy');
         pollTimer = setTimeout(pollReads, document.hidden ? 30000 : 8000);
       } else if (wasWaiting) {
         var hand = (state.photos || []).filter(isPending).length;
         $('matchProg').textContent = '';
-        status('Every tag has been read in the cloud. ' + (hand
+        status('Computed. Every tag has been read in the cloud. ' + (hand
           ? n(hand) + ' photograph' + (hand === 1 ? '' : 's') + ' still need a code by hand.'
           : 'Every photograph now has a code.'), 'ok');
       }
@@ -1191,7 +1193,7 @@
     btn.disabled = true;
     var total = queue.xlsx.length + queue.photo.length, done = 0, added = 0, skipped = [];
     var photosBefore = (state.photos || []).length, cloudSent = 0;
-    restoredPhotos = 0;
+    restoredPhotos = 0; restoredRaw = 0;
     status('Reading files...', 'busy'); progress(0);
 
     var chain = Promise.resolve();
@@ -1217,7 +1219,12 @@
             return !dup;
           });
           var repaired = Object.keys(repairs).reduce(function (c, id) {
-            return c.then(function () { return Store.backend.putRaw(id, f.name, f).catch(function () {}); });
+            return c.then(function () {
+              // only a copy that was actually missing counts as put back
+              return Store.backend.getRaw(id, f.name).catch(function () { return null; }).then(function (had) {
+                return Store.backend.putRaw(id, f.name, f).then(function () { if (!had) restoredRaw++; });
+              }).catch(function () {});
+            });
           }, Promise.resolve());
           if (!fresh.length) return repaired;
           // the workbook itself is stored first: removing a file later rebuilds
@@ -1263,7 +1270,9 @@
       var bits = [];
       if (added) bits.push(added + ' sheet(s)');
       if (newPhotos > 0) bits.push(newPhotos + ' photograph' + (newPhotos === 1 ? '' : 's'));
-      var msg = bits.length ? 'Computed. ' + bits.join(' and ') + ' added.' : restoredPhotos ? 'Computed.' : 'Nothing new to add.';
+      var msg = 'Computed. ' + (bits.length ? bits.join(' and ') + ' added.' : 'Nothing new to add.');
+      if (restoredRaw) msg += ' Stored a fresh copy of ' + restoredRaw + ' workbook' + (restoredRaw === 1 ? '' : 's') +
+        ' that was missing, so any file can now be removed and recomputed.';
       if (restoredPhotos) {
         msg += ' ' + restoredPhotos + ' photograph' + (restoredPhotos === 1 ? ' that was' : 's that were') +
                ' missing from storage put back.';
@@ -1275,8 +1284,11 @@
       var lit = A.lines.filter(function (l) { return thumbByDesign[l.key]; }).length;
       if (lit) msg += ' ' + lit + ' line' + (lit === 1 ? ' has' : 's have') +
                       ' a photograph \u2014 press With photo above the table to see just those.';
-      if (cloudSent) { msg += ' ' + readingNote(waitingCount() || cloudSent); status(msg, 'busy'); return; }
-      status(msg, skipped.length && !added ? 'err' : 'ok');
+      if (cloudSent) {
+        var w = waitingCount() || cloudSent;
+        msg += ' ' + n(w) + ' tag photograph' + (w === 1 ? ' is' : 's are') + ' still being read in the background.';
+      }
+      status(msg, skipped.length && !added && !restoredRaw ? 'err' : 'ok');
     }).catch(function (e) {
       progress(null);
       var msg = e.message || String(e);
