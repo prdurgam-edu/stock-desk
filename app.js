@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15c';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15d';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -305,7 +305,7 @@
       '<div class="gscroll"><table class="linestable"><thead><tr>' +
       sortHead('ref', 'Saree', 'thumbcol') + '<th>Last 14 days</th>' +
       sortHead('bal', 'On hand', 'r') + sortHead('sold', 'Sold', 'r') + sortHead('pct', '% sales', 'r') +
-      sortHead('st15', 'Sell-through 15 days', 'r') + '<th>Movement</th>' +
+      sortHead('st15', 'Sell-through', 'r') + '<th>Movement</th>' +
       '</tr></thead><tbody></tbody></table></div>';
     d._shown = 0;
     moreInGroup(d);
@@ -365,7 +365,7 @@
         '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span>' +
         '<span class="nums"><b class="num">' + n(l.bal) + '</b> on hand &middot; <b class="num">' + n(l.sold) +
           '</b> sold &middot; ' + pct(l.pctSold) + ' sales</span>' +
-        '<span class="clear">Sell-through 15 days: ' + pct(l.sellThrough15) + (sent ? ' &middot; photo ' + sent : '') + '</span>' +
+        '<span class="clear">Sell-through: ' + pct(l.sellThrough15) + (sent ? ' &middot; photo ' + sent : '') + '</span>' +
       '</figcaption></figure>';
   }
 
@@ -411,7 +411,7 @@
       '<td class="r m" data-l="On hand">' + n(l.bal) + '</td>' +
       '<td class="r m" data-l="Sold">' + n(l.sold) + '</td>' +
       '<td class="r m" data-l="% sales">' + pct(l.pctSold) + '</td>' +
-      '<td class="r m" data-l="Sell-through 15 days">' + pct(l.sellThrough15) + '</td>' +
+      '<td class="r m" data-l="Sell-through">' + pct(l.sellThrough15) + '</td>' +
       '<td class="mv"><span class="pill ' + l.status + '">' + LBL[l.status] + '</span></td></tr>';
   }
 
@@ -479,7 +479,7 @@
         '<td class="r m" data-l="On hand">' + n(s.bal) + '</td>' +
         '<td class="r m" data-l="Sold">' + n(s.sold) + '</td>' +
         '<td class="r m" data-l="% sales">' + pct(s.pctSold) + '</td>' +
-        '<td class="r m" data-l="Sell-through 15 days">' + pct(s.sellThrough15) + '</td>' +
+        '<td class="r m" data-l="Sell-through">' + pct(s.sellThrough15) + '</td>' +
         '<td class="mv"><span class="pill ' + s.status + '">' + LBL[s.status] + '</span></td></tr>';
     }).join('') + (list.length > 10
       ? '<tr class="sellmore"><td colspan="8"><button type="button" class="iconbtn" id="sellMore">Show all ' +

@@ -437,7 +437,7 @@ line is under Others it falls back on the line's pace.
 
 **% sales.** Of every piece that came in, the share sold: Sold ÷ (Sold + On hand).
 
-**Sell-through 15 days.** Pieces sold in the 15 days up to the latest stock count,
+**Sell-through.** Shown simply as *Sell-through*: pieces sold in the 15 days up to the latest stock count,
 ÷ the pieces on hand when those 15 days began. That opening stock is worked out
 from today's stock plus what sold, less what came in, in the daily files of
 those days. Days without a daily file count as no movement, and the note above
