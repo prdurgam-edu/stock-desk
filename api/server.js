@@ -29,6 +29,7 @@
  *   POST task/looks?id=ID         describe one stored photograph's look
  *   POST looks/backfill           queue every photograph not yet described
  *   POST photos/missing {ids}     which of these photographs are not stored
+ *   POST photos/delete {ids}      delete these photographs, with their readings and looks
  *
  * Reading does not need anyone on the page. The page stores the photographs
  * and asks for them to be read; this service puts one Cloud Tasks task per
@@ -580,6 +581,20 @@ const server = http.createServer(async (req, res) => {
         }
       } else { todo.forEach(id => localEnqueue(id, 'looks')); queued = todo.length; }
       return send(res, 200, { photos: photos.length, described: have.size, queued, failed });
+    }
+
+    // delete photographs for good: the picture, its reading and its look
+    if (route === 'photos/delete' && req.method === 'POST') {
+      let ids = [];
+      try { ids = JSON.parse((await body(req)).toString('utf8')).ids || []; } catch {}
+      ids = ids.filter(id => typeof id === 'string' && ID.test(id)).slice(0, 1000);
+      for (let i = 0; i < ids.length; i += 25) {
+        await Promise.all(ids.slice(i, i + 25).map(id => Promise.all([
+          store.del('photos/' + id), store.del(readKey(id)), store.del(looksKey(id))
+        ])));
+      }
+      if (ids.length) looksCache = null;
+      return send(res, 200, { deleted: ids.length });
     }
 
     // which of these photographs are not actually stored? (a re-uploaded zip
