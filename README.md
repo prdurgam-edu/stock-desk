@@ -444,7 +444,7 @@ those days. Days without a daily file count as no movement, and the note above
 the table says how many of the 15 days have one.
 
 **Photo date.** Under each saree in the table, and on every photo card, the day
-the photograph was sent on WhatsApp — from the chat export when it is in the zip,
+the photograph was sent on WhatsApp, as dd/mm/yy — from the chat export when it is in the zip,
 otherwise from the photo's file name.
 
 **Seller.** From the Supplier column of a full-period export. Daily exports do not

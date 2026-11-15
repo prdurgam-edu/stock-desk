@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15b';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15c';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -26,8 +26,9 @@
   // the day a photograph was sent on WhatsApp (from the chat, or its file name)
   function sentDay(p) {
     if (!p || p.sentAt == null) return '';
-    var d = new Date(p.sentAt), m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return d.getDate() + ' ' + m[d.getMonth()] + ' ' + d.getFullYear();
+    // dd/mm/yy, as the shop writes dates
+    var d = new Date(p.sentAt), two = function (x) { return (x < 10 ? '0' : '') + x; };
+    return two(d.getDate()) + '/' + two(d.getMonth() + 1) + '/' + two(d.getFullYear() % 100);
   }
   function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; }
   function fmtDate(d) {
