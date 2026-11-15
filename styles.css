@@ -599,3 +599,6 @@ img.imgwait{visibility:hidden}
   #filesDlg .rmask{font-size:14px}
   #filesDlg .rmask .linkbtn{margin-left:4px}
 }
+/* the day a photograph was sent on WhatsApp */
+.linestable td.thumb .sent{display:block;font-size:11px;color:var(--ink-3);margin-top:1px}
+.ph .cap .sent{font-size:11.5px;color:var(--ink-3);margin:2px 0}

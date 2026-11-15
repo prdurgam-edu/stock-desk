@@ -20,6 +20,7 @@
   var MONTHS = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
   var MIN_DAILY_DAYS = 4;   // with no full-period export, pace needs at least this many days
   var PRIOR_DAYS = 28;      // how many days of daily files the full-period pace is worth
+  var SELL_DAYS = 15;       // sell-through looks at this many days
 
   function normKey(s) { return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
   function num(v) {
@@ -207,6 +208,8 @@
     // a design that is in no current book and holds no stock is last year's, not today's
 
     var spark = dates.slice(-14);
+    // sell-through looks at the last fifteen days up to the latest stock count
+    var win = asOf ? dates.filter(function (d) { return d <= asOf && daysBetween(d, asOf) < SELL_DAYS; }) : [];
     var periodWeeks = cum ? Math.max(1, daysBetween(cum.from, cum.asOf || cum.to) / 7) : null;
 
     var lines = Object.keys(keys).map(function (k) {
@@ -227,6 +230,16 @@
       var bal = (state.latest && state.latest.bal[k]) || 0;
       var c = cum && cum.rows[k];
 
+      /* Sell-through over 15 days: pieces sold in those days, out of the pieces
+         on hand when they began. That opening stock is today's, plus what sold,
+         less what came in, in the daily files of those days. */
+      var sold15 = 0, in15 = 0;
+      for (var w = 0; w < win.length; w++) {
+        var mw = state.days[win[w]].mv[k];
+        if (mw) { in15 += mw[0]; sold15 += mw[1]; }
+      }
+      var open15 = Math.max(bal + sold15 - in15, sold15);
+
       var ratePerDay;
       // a design the full-period export has never seen (it arrived since) has
       // no long run to lean on: its daily files are all there is
@@ -243,8 +256,11 @@
                  : cover > slowWeeks ? 'slow'
                  : cover > fastWeeks ? 'steady' : 'fast';
 
+      var soldShown = cum ? (c ? c.tout : 0) + soldSince : soldObs;
       return {
         key: k, ref: state.refs[k] || k, seller: state.sellers[k] || '',
+        // % sales: of every piece that came in, how many have sold
+        pctSold: soldShown + bal > 0 ? soldShown / (soldShown + bal) : null,
         bal: bal, soldObs: soldObs, inObs: inObs,
         // what "Sold" means on the page: the year so far, from the full-period
         // export, plus the daily files that came after it; with no full-period
@@ -253,6 +269,8 @@
         soldCum: c ? c.tout : null, inCum: c ? c.tin : null,
         rate: ratePerDay, cover: cover, series: series,
         lastSale: last, idle: last && asOf ? daysBetween(last, asOf) : null,
+        sold15: sold15, open15: open15,
+        sellThrough15: win.length && open15 > 0 ? sold15 / open15 : null,
         status: status
       };
     });
@@ -262,15 +280,18 @@
     lines.forEach(function (l) {
       var nm = l.seller || 'Not yet mapped';
       var s = byS[nm] || (byS[nm] = {
-        seller: nm, lines: 0, bal: 0, soldObs: 0, sold: 0, rate: 0,
+        seller: nm, lines: 0, bal: 0, soldObs: 0, sold: 0, rate: 0, sold15: 0, open15: 0,
         series: spark.map(function () { return 0; })
       });
       s.lines++; s.bal += l.bal; s.soldObs += l.soldObs; s.sold += l.sold; s.rate += l.rate;
+      s.sold15 += l.sold15; s.open15 += l.open15;
       for (var i = 0; i < s.series.length; i++) s.series[i] += l.series[i] || 0;
     });
     var sellers = Object.keys(byS).map(function (nm) {
       var s = byS[nm];
       s.cover = s.rate > 0 ? (s.bal / s.rate) / 7 : null;
+      s.pctSold = s.sold + s.bal > 0 ? s.sold / (s.sold + s.bal) : null;
+      s.sellThrough15 = win.length && s.open15 > 0 ? s.sold15 / s.open15 : null;
       s.status = s.bal <= 0 ? 'soldout' : s.cover == null ? 'dead'
                : s.cover > slowWeeks ? 'slow' : s.cover > fastWeeks ? 'steady' : 'fast';
       return s;
@@ -292,6 +313,8 @@
       cumulative: cum ? { from: cum.from, to: cum.to, asOf: cum.asOf || cum.to,
                           weeks: periodWeeks ? Math.round(periodWeeks * 10) / 10 : null } : null,
       mappedSellers: Object.keys(state.sellers).length,
+      // the daily files the 15-day sell-through rests on
+      sellWindow: { days: SELL_DAYS, files: win.length, from: win[0] || null, to: asOf },
       slowWeeks: slowWeeks, fastWeeks: fastWeeks
     };
   }
@@ -306,6 +329,7 @@
     normKey: normKey,
     daysBetween: daysBetween,
     MIN_DAILY_DAYS: MIN_DAILY_DAYS,
-    PRIOR_DAYS: PRIOR_DAYS
+    PRIOR_DAYS: PRIOR_DAYS,
+    SELL_DAYS: SELL_DAYS
   };
 })(window);

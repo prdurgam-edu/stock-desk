@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-14f';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15a';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -20,9 +20,15 @@
   function n(v) { return (v == null ? 0 : Math.round(v)).toLocaleString('en-IN'); }
   function n1(v) { return v == null ? MDASH : v.toFixed(1); }
   // no pace at all is not missing data: at this rate the stock never clears
-  function wks(v, bal) { return v == null ? (bal > 0 ? 'never' : MDASH) : v > 520 ? '520+' : Math.round(v); }
-  function cover(l) { return l.cover == null ? (l.bal > 0 ? 'never clears at this pace' : MDASH)
-                                             : wks(l.cover, l.bal) + 'w to clear'; }
+  function pct(v) { return v == null ? MDASH : Math.round(v * 100) + '%'; }
+  // a line's selling, as the photo cards say it: of what came in, how much sold
+  function soldOf(l) { return l.pctSold == null ? 'nothing came in' : pct(l.pctSold) + ' sold'; }
+  // the day a photograph was sent on WhatsApp (from the chat, or its file name)
+  function sentDay(p) {
+    if (!p || p.sentAt == null) return '';
+    var d = new Date(p.sentAt), m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return d.getDate() + ' ' + m[d.getMonth()] + ' ' + d.getFullYear();
+  }
   function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : t; return d.innerHTML; }
   function fmtDate(d) {
     if (!d) return MDASH;
@@ -162,14 +168,22 @@
       ? 'Pace is measured from the ' + dn + ' on record. Add a full-period export for the seller map and a steadier pace.'
       : 'Pace comes from only ' + dn + '. Upload ' + (Compute.MIN_DAILY_DAYS - A.observedDays) +
         ' more, or a full-period export, for a steadier pace.';
+    // what the 15-day sell-through rests on
+    $('tilesNote').textContent +=
+      (A.sellWindow && A.asOf
+        ? ' Sell-through 15 days: pieces sold in the 15 days to ' + fmtDate(A.asOf) + ', out of those on hand when they began' +
+          (A.sellWindow.files >= A.sellWindow.days ? '.'
+            : A.sellWindow.files ? ' ' + MDASH + ' ' + A.sellWindow.files + ' of those 15 days have a daily file, so it counts only those.'
+            : ' ' + MDASH + ' no daily file falls in those days yet.')
+        : '');
 
     $('linesQual').textContent = A.basis === 'daily' ? 'daily pace' : A.basis === 'blend' ? 'blended pace' : 'period pace';
 
-    // days since a sale needs daily files; until then the choice would sort nothing
-    var quiet = $('sortBy').querySelector('option[value="idle"]');
-    var hasIdle = A.lines.some(function (l) { return l.idle != null; });
-    quiet.hidden = quiet.disabled = !hasIdle;
-    if (!hasIdle && filter.sort === 'idle') { filter.sort = 'sold'; filter.dir = -1; $('sortBy').value = 'sold'; }
+    // sell-through needs daily files in the last 15 days; until then the choice would sort nothing
+    var thru = $('sortBy').querySelector('option[value="st15"]');
+    var hasThru = !!(A.sellWindow && A.sellWindow.files);
+    thru.hidden = thru.disabled = !hasThru;
+    if (!hasThru && filter.sort === 'st15') { filter.sort = 'sold'; filter.dir = -1; $('sortBy').value = 'sold'; }
 
     var sel = $('sellerFilter'), cur = sel.value;
     sel.innerHTML = '<option value="">Every seller</option>' + A.sellers.map(function (s) {
@@ -208,8 +222,8 @@
         return va < vb ? -dir : va > vb ? dir : 0;
       }
       if (k === 'sold') { va = a.sold; vb = b.sold; }
-      else if (k === 'idle') { va = a.idle == null ? 1e9 : a.idle; vb = b.idle == null ? 1e9 : b.idle; }
-      else if (k === 'cover') { va = a.cover == null ? 1e9 : a.cover; vb = b.cover == null ? 1e9 : b.cover; }
+      else if (k === 'pct') { va = a.pctSold == null ? -1 : a.pctSold; vb = b.pctSold == null ? -1 : b.pctSold; }
+      else if (k === 'st15') { va = a.sellThrough15 == null ? -1 : a.sellThrough15; vb = b.sellThrough15 == null ? -1 : b.sellThrough15; }
       else { va = a[k] || 0; vb = b[k] || 0; }
       return (va - vb) * dir || (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0);
     });
@@ -297,8 +311,8 @@
     d.querySelector('.gbody').innerHTML =
       '<div class="gscroll"><table class="linestable"><thead><tr>' +
       sortHead('ref', 'Saree', 'thumbcol') + '<th>Last 14 days</th>' +
-      sortHead('bal', 'On hand', 'r') + sortHead('sold', 'Sold', 'r') + sortHead('rate', 'Per day', 'r') +
-      sortHead('cover', 'Weeks to clear', 'r') + sortHead('idle', 'Days idle', 'r') + '<th>Movement</th>' +
+      sortHead('bal', 'On hand', 'r') + sortHead('sold', 'Sold', 'r') + sortHead('pct', '% sales', 'r') +
+      sortHead('st15', 'Sell-through 15 days', 'r') + '<th>Movement</th>' +
       '</tr></thead><tbody></tbody></table></div>';
     d._shown = 0;
     moreInGroup(d);
@@ -348,8 +362,7 @@
 
   function tile(l) {
     var pid = thumbByDesign[l.key], more = (picsByDesign[l.key] || []).length - 1;
-    var w = wks(l.cover, l.bal);
-    var clear = w === 'never' ? 'never clears at this pace' : w === MDASH ? 'nothing on hand' : w + ' weeks to clear';
+    var sent = sentDay(photoById(pid));
     return '<figure class="ptile ' + l.status + '">' +
       '<span class="pic"><img data-pid="' + esc(pid) + '" data-big="1" data-design="' + esc(l.key) +
         '" alt="' + esc(l.ref) + '" loading="lazy">' +
@@ -358,8 +371,8 @@
         '<span class="top"><span class="ref">' + esc(l.ref) + '</span><span class="pill ' + l.status + '">' + LBL[l.status] + '</span></span>' +
         '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span>' +
         '<span class="nums"><b class="num">' + n(l.bal) + '</b> on hand &middot; <b class="num">' + n(l.sold) +
-          '</b> sold &middot; ' + n1(l.rate) + '/day</span>' +
-        '<span class="clear">' + clear + (l.idle != null ? ' &middot; ' + l.idle + ' days since a sale' : '') + '</span>' +
+          '</b> sold &middot; ' + pct(l.pctSold) + ' sales</span>' +
+        '<span class="clear">Sell-through 15 days: ' + pct(l.sellThrough15) + (sent ? ' &middot; photo ' + sent : '') + '</span>' +
       '</figcaption></figure>';
   }
 
@@ -398,14 +411,14 @@
           (more > 0 ? '<span class="morepics" aria-hidden="true">+' + more + '</span>' : '') + '</span>'
         : '<span class="none" title="No photograph linked yet"></span>') +
         '<span class="ref">' + esc(l.ref) + '</span>' +
-        '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span></td>' +
+        '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span>' +
+        (pid && sentDay(photoById(pid)) ? '<span class="sent">Photo ' + sentDay(photoById(pid)) + '</span>' : '') + '</td>' +
       // data-l names each number, for the phone layout, where rows become cards
       '<td class="spk">' + sparkline(l.series) + '</td>' +
       '<td class="r m" data-l="On hand">' + n(l.bal) + '</td>' +
       '<td class="r m" data-l="Sold">' + n(l.sold) + '</td>' +
-      '<td class="r m" data-l="Per day">' + n1(l.rate) + '</td>' +
-      '<td class="r m" data-l="Weeks to clear">' + wks(l.cover, l.bal) + '</td>' +
-      '<td class="r m" data-l="Days idle">' + (l.idle == null ? MDASH : l.idle) + '</td>' +
+      '<td class="r m" data-l="% sales">' + pct(l.pctSold) + '</td>' +
+      '<td class="r m" data-l="Sell-through 15 days">' + pct(l.sellThrough15) + '</td>' +
       '<td class="mv"><span class="pill ' + l.status + '">' + LBL[l.status] + '</span></td></tr>';
   }
 
@@ -472,8 +485,8 @@
         '<td class="r m" data-l="Lines">' + n(s.lines) + '</td>' +
         '<td class="r m" data-l="On hand">' + n(s.bal) + '</td>' +
         '<td class="r m" data-l="Sold">' + n(s.sold) + '</td>' +
-        '<td class="r m" data-l="Per day">' + n1(s.rate) + '</td>' +
-        '<td class="r m" data-l="Weeks to clear">' + wks(s.cover, s.bal) + '</td>' +
+        '<td class="r m" data-l="% sales">' + pct(s.pctSold) + '</td>' +
+        '<td class="r m" data-l="Sell-through 15 days">' + pct(s.sellThrough15) + '</td>' +
         '<td class="mv"><span class="pill ' + s.status + '">' + LBL[s.status] + '</span></td></tr>';
     }).join('') + (list.length > 10
       ? '<tr class="sellmore"><td colspan="8"><button type="button" class="iconbtn" id="sellMore">Show all ' +
@@ -512,7 +525,7 @@
       // matched to: the check is whether the two are the same cloth
       var partner = p.how === 'timing' && p.linkedTo && photoById(p.linkedTo);
       body = '<div class="d">' + esc(l ? l.ref : p.designKey) + '</div>' +
-        '<div class="s">' + (l ? n(l.bal) + ' on hand ' + MDASH + ' ' + cover(l)
+        '<div class="s">' + (l ? n(l.bal) + ' on hand ' + MDASH + ' ' + soldOf(l)
                                : 'not in the current workbook') + '</div>' +
         (partner ? '<div class="partner"><img data-pid="' + esc(partner.id) + '" data-big="1" alt="close-up">' +
                    '<span>The close-up it was matched to. Same cloth?</span></div>' : '') +
@@ -535,7 +548,7 @@
           '<button class="link" data-link="' + esc(p.id) + '" type="button" disabled>Link</button></div>';
     } else if (mode === 'mapped') {
       body = '<div class="d">' + esc(l ? l.ref : p.designKey) + '</div>' +
-        '<div class="s">' + (l ? n(l.bal) + ' on hand &middot; ' + cover(l)
+        '<div class="s">' + (l ? n(l.bal) + ' on hand &middot; ' + soldOf(l)
                                : 'not in the current workbook') + '</div>' +
         '<div class="row"><button class="unlink" data-unlink="' + esc(p.id) + '" type="button">Remove this mapping</button></div>';
     } else {
@@ -559,6 +572,7 @@
     return '<figure class="ph" style="margin:0">' +
       '<img data-pid="' + esc(p.id) + '" data-big="1" alt="' + esc(p.name) + '">' +
       '<figcaption class="cap"><span class="st ' + st + '">' + esc(badge) + '</span>' +
+      (sentDay(p) ? '<div class="sent">Sent ' + sentDay(p) + (p.sender ? ' by ' + esc(p.sender) : '') + '</div>' : '') +
       body + '</figcaption></figure>';
   }
 

@@ -420,11 +420,22 @@ With no full-period export loaded, pace is the daily files' average.
 **Sold.** The year so far from the newest full-period export, plus the daily
 files dated on or after the day it was run.
 
-**Weeks to clear.** Stock on hand divided by that pace. This is what Fast, Steady,
-Slow and Dead are built on — a line bought in September that has moved 40% in
-three weeks is fast; the same 40% over eight months is not.
+**Movement.** Fast, Steady, Slow and Dead are built on how many weeks the stock
+on hand would take to clear at that pace — a line bought in September that has
+moved 40% in three weeks is fast; the same 40% over eight months is not. The
+weeks themselves are no longer shown as a column.
 
-**Days idle.** Days since the last file that recorded a sale of that design.
+**% sales.** Of every piece that came in, the share sold: Sold ÷ (Sold + On hand).
+
+**Sell-through 15 days.** Pieces sold in the 15 days up to the latest stock count,
+÷ the pieces on hand when those 15 days began. That opening stock is worked out
+from today's stock plus what sold, less what came in, in the daily files of
+those days. Days without a daily file count as no movement, and the note above
+the table says how many of the 15 days have one.
+
+**Photo date.** Under each saree in the table, and on every photo card, the day
+the photograph was sent on WhatsApp — from the chat export when it is in the zip,
+otherwise from the photo's file name.
 
 **Seller.** From the Supplier column of a full-period export. Daily exports do not
 have this column, so upload a full export whenever you want the seller map
