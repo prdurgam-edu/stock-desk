@@ -21,6 +21,12 @@
   var MIN_DAILY_DAYS = 4;   // with no full-period export, pace needs at least this many days
   var PRIOR_DAYS = 28;      // how many days of daily files the full-period pace is worth
   var SELL_DAYS = 15;       // sell-through looks at this many days
+  // movement, from the 15-day sell-through: 90%+ Fast, 75%+ Medium, 40%+ Steady, 20%+ Slow, under 20% Dead
+  var BANDS = [[0.9, 'fast'], [0.75, 'medium'], [0.4, 'steady'], [0.2, 'slow']];
+  function band(v) {
+    for (var i = 0; i < BANDS.length; i++) if (v >= BANDS[i][0] - 1e-9) return BANDS[i][1];
+    return 'dead';
+  }
 
   function normKey(s) { return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
   function num(v) {
@@ -210,6 +216,9 @@
     var spark = dates.slice(-14);
     // sell-through looks at the last fifteen days up to the latest stock count
     var win = asOf ? dates.filter(function (d) { return d <= asOf && daysBetween(d, asOf) < SELL_DAYS; }) : [];
+    // the movement groups need a full 15 days of daily files behind the latest
+    // stock count; until then every line waits under Others
+    var ready15 = !!(win.length && dates.length && daysBetween(dates[0], asOf) >= SELL_DAYS - 1);
     var periodWeeks = cum ? Math.max(1, daysBetween(cum.from, cum.asOf || cum.to) / 7) : null;
 
     var lines = Object.keys(keys).map(function (k) {
@@ -250,11 +259,14 @@
 
       var cover = ratePerDay > 0 ? (bal / ratePerDay) / 7 : null;   // weeks
       var everSold = soldObs > 0 || (c && c.tout > 0);
-      var status = bal <= 0 ? 'soldout'
+      // the pace-based verdict, kept for "Should I buy?" while the 15 days fill
+      var paceStatus = bal <= 0 ? 'soldout'
                  : !everSold ? 'dead'
                  : cover == null ? 'dead'
                  : cover > slowWeeks ? 'slow'
                  : cover > fastWeeks ? 'steady' : 'fast';
+      var st15 = win.length && open15 > 0 ? sold15 / open15 : null;
+      var status = ready15 && st15 != null ? band(st15) : 'others';
 
       var soldShown = cum ? (c ? c.tout : 0) + soldSince : soldObs;
       return {
@@ -270,8 +282,8 @@
         rate: ratePerDay, cover: cover, series: series,
         lastSale: last, idle: last && asOf ? daysBetween(last, asOf) : null,
         sold15: sold15, open15: open15,
-        sellThrough15: win.length && open15 > 0 ? sold15 / open15 : null,
-        status: status
+        sellThrough15: st15,
+        status: status, paceStatus: paceStatus
       };
     });
 
@@ -292,13 +304,12 @@
       s.cover = s.rate > 0 ? (s.bal / s.rate) / 7 : null;
       s.pctSold = s.sold + s.bal > 0 ? s.sold / (s.sold + s.bal) : null;
       s.sellThrough15 = win.length && s.open15 > 0 ? s.sold15 / s.open15 : null;
-      s.status = s.bal <= 0 ? 'soldout' : s.cover == null ? 'dead'
-               : s.cover > slowWeeks ? 'slow' : s.cover > fastWeeks ? 'steady' : 'fast';
+      s.status = ready15 && s.sellThrough15 != null ? band(s.sellThrough15) : 'others';
       return s;
     }).sort(function (a, b) { return b.sold - a.sold || b.bal - a.bal; });
 
-    var tot = { fast: 0, steady: 0, slow: 0, dead: 0, soldout: 0 };
-    var pcs = { fast: 0, steady: 0, slow: 0, dead: 0, soldout: 0 };
+    var tot = { fast: 0, medium: 0, steady: 0, slow: 0, dead: 0, others: 0 };
+    var pcs = { fast: 0, medium: 0, steady: 0, slow: 0, dead: 0, others: 0 };
     lines.forEach(function (l) { tot[l.status]++; pcs[l.status] += l.bal; });
 
     var trend = dates.map(function (d) {
@@ -314,7 +325,7 @@
                           weeks: periodWeeks ? Math.round(periodWeeks * 10) / 10 : null } : null,
       mappedSellers: Object.keys(state.sellers).length,
       // the daily files the 15-day sell-through rests on
-      sellWindow: { days: SELL_DAYS, files: win.length, from: win[0] || null, to: asOf },
+      sellWindow: { days: SELL_DAYS, files: win.length, from: win[0] || null, to: asOf, ready: ready15 },
       slowWeeks: slowWeeks, fastWeeks: fastWeeks
     };
   }
@@ -330,6 +341,7 @@
     daysBetween: daysBetween,
     MIN_DAILY_DAYS: MIN_DAILY_DAYS,
     PRIOR_DAYS: PRIOR_DAYS,
-    SELL_DAYS: SELL_DAYS
+    SELL_DAYS: SELL_DAYS,
+    BANDS: BANDS
   };
 })(window);

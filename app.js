@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15a';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15b';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -120,7 +120,11 @@
   }
 
   /* ---------------- rendering ---------------- */
-  var LBL = { fast: 'Fast', steady: 'Steady', slow: 'Slow', dead: 'Dead', soldout: 'Sold out' };
+  var LBL = { fast: 'Fast', medium: 'Medium', steady: 'Steady', slow: 'Slow', dead: 'Dead', others: 'Others', soldout: 'Sold out' };
+  // what each group means, by 15-day sell-through
+  var BAND_NOTE = { fast: '90\u2013100% sold in 15 days', medium: '75\u201390% sold in 15 days',
+    steady: '40\u201375% sold in 15 days', slow: '20\u201340% sold in 15 days', dead: 'under 20% sold in 15 days' };
+  var MOVES = ['fast', 'medium', 'steady', 'slow', 'dead', 'others'];
 
   function render() {
     // the "Should I buy?" tab works from the same history and analysis
@@ -134,7 +138,7 @@
     $('headline').innerHTML = [
       ['Stock on hand', n(A.onHand), n(A.lines.length) + ' design lines'],
       ['Sold in the days recorded', n(A.soldObs), A.observedDays + (A.observedDays === 1 ? ' day' : ' days') + ' of files'],
-      ['Clearing fast', n(A.pieces.fast), 'under ' + A.fastWeeks + ' weeks'],
+      ['Fast', n(A.pieces.fast), BAND_NOTE.fast],
       ['Slow or dead', n(stuck), A.onHand ? Math.round(stuck / A.onHand * 100) + '% of the floor' : '', 'alarm'],
       ['As of', fmtDate(A.asOf), A.asOf ? A.asOf.slice(0, 4) : '']
     ].map(function (h) {
@@ -145,7 +149,7 @@
     $('trendQual').textContent = A.observedDays + ' day' + (A.observedDays === 1 ? '' : 's') + ' recorded';
     lineChart($('trendChart'), A.trend);
 
-    $('tiles').innerHTML = ['fast', 'steady', 'slow', 'dead'].map(function (k) {
+    $('tiles').innerHTML = MOVES.map(function (k) {
       return '<button class="tile ' + k + '" type="button" data-s="' + k + '" aria-pressed="' +
         (filter.status === k) + '"><div class="v num">' + n(A.pieces[k]) + '</div>' +
         '<div class="k">' + LBL[k] + ' &middot; ' + n(A.counts[k]) + ' lines</div></button>';
@@ -157,27 +161,16 @@
       });
     });
     var dn = A.observedDays + ' daily file' + (A.observedDays === 1 ? '' : 's');
-    $('tilesNote').textContent = A.basis === 'blend'
-      ? 'Pace blends the full-period export with the ' + dn + ' on record. Each daily file moves it a little; ' +
-        (A.observedDays < Compute.PRIOR_DAYS
-          ? 'after ' + Compute.PRIOR_DAYS + ' days of files they count as much as the export, and lead from then on.'
-          : 'with ' + A.observedDays + ' days on record they now lead.')
-      : A.basis === 'period'
-      ? 'Pace comes from the full-period export. Upload the daily files and it starts following what actually sells each day.'
-      : A.observedDays >= Compute.MIN_DAILY_DAYS
-      ? 'Pace is measured from the ' + dn + ' on record. Add a full-period export for the seller map and a steadier pace.'
-      : 'Pace comes from only ' + dn + '. Upload ' + (Compute.MIN_DAILY_DAYS - A.observedDays) +
-        ' more, or a full-period export, for a steadier pace.';
-    // what the 15-day sell-through rests on
-    $('tilesNote').textContent +=
-      (A.sellWindow && A.asOf
-        ? ' Sell-through 15 days: pieces sold in the 15 days to ' + fmtDate(A.asOf) + ', out of those on hand when they began' +
-          (A.sellWindow.files >= A.sellWindow.days ? '.'
-            : A.sellWindow.files ? ' ' + MDASH + ' ' + A.sellWindow.files + ' of those 15 days have a daily file, so it counts only those.'
-            : ' ' + MDASH + ' no daily file falls in those days yet.')
-        : '');
-
-    $('linesQual').textContent = A.basis === 'daily' ? 'daily pace' : A.basis === 'blend' ? 'blended pace' : 'period pace';
+    var W = A.sellWindow || {};
+    $('tilesNote').textContent = !A.asOf ? ''
+      : W.ready
+      ? 'Grouped by sell-through over the 15 days to ' + fmtDate(A.asOf) + ': pieces sold in those days, out of those on hand when they began. ' +
+        (W.files >= W.days ? 'Every one of the 15 days has a daily file.'
+          : W.files + ' of the 15 days have a daily file; days without one count as no sales.')
+      : 'Every line waits under Others until there are 15 days of daily files up to ' + fmtDate(A.asOf) +
+        (A.observedDays ? ' (' + dn + ' so far, from ' + fmtDate(A.dates[0]) + ').' : ' (none yet).') +
+        ' Upload the daily file each day and the groups fill in.';
+    $('linesQual').textContent = '15-day sell-through';
 
     // sell-through needs daily files in the last 15 days; until then the choice would sort nothing
     var thru = $('sortBy').querySelector('option[value="st15"]');
@@ -201,7 +194,8 @@
       state.files.length + ' file(s) on record &middot; history kept in ' + esc(Store.label) +
       ' &middot; seller map covers ' + n(A.mappedSellers) + ' designs<br>' +
       'Build ' + BUILD + ' &middot; tags read by ' + esc(Matcher.engine || 'hand') + '<br>' +
-      'Slow means stock needs more than ' + A.slowWeeks + ' weeks to clear at its current pace. Fast means under ' + A.fastWeeks + '.';
+      'Movement is by 15-day sell-through: Fast 90\u2013100%, Medium 75\u201390%, Steady 40\u201375%, Slow 20\u201340%, Dead under 20%. ' +
+      'Others: not yet 15 days of daily files, or nothing on hand or sold in those days.';
   }
 
   function visibleLines() {
@@ -236,7 +230,7 @@
                   so the rest of the page stays a short scroll away.
      Photo grid   the photographed lines as tiles, for going through by eye.
      Search, seller, sort and the tiles above apply to both. */
-  var GROUPS = ['fast', 'steady', 'slow', 'dead', 'soldout'];
+  var GROUPS = MOVES;
   var view = 'movement', openGroups = {}, groupRows = {}, viewObs = [];
   var gridRows = [], gridShown = 0;
   try { if (localStorage.getItem('nsd.linesView') === 'grid') view = 'grid'; } catch (e) {}
@@ -258,11 +252,9 @@
   }
 
   function groupNote(k) {
-    return k === 'fast' ? 'clears in under ' + A.fastWeeks + ' weeks at its pace'
-      : k === 'steady' ? 'clears in ' + A.fastWeeks + ' to ' + A.slowWeeks + ' weeks'
-      : k === 'slow' ? 'needs more than ' + A.slowWeeks + ' weeks to clear'
-      : k === 'dead' ? 'stock on hand and nothing selling'
-      : 'nothing left on hand';
+    if (BAND_NOTE[k]) return BAND_NOTE[k];
+    return A.sellWindow && A.sellWindow.ready ? 'nothing on hand or sold in the 15 days'
+      : 'waiting for 15 days of daily files';
   }
 
   function renderGroups() {

@@ -12,8 +12,8 @@ depends on Claude or on any service other than the one you host it on.
   day's movement, building its own history as you upload one file a day.
 - Reads a **full-period** export too, and takes the **design → seller map** from its
   Supplier column, which the daily export does not carry.
-- Judges every line on **weeks to clear at its current pace**, not on the share of a
-  lot that happens to have sold.
+- Groups every line by its **15-day sell-through**: Fast 90–100%, Medium 75–90%,
+  Steady 40–75%, Slow 20–40%, Dead under 20%.
 - Stores the WhatsApp tag photographs and **reads the design code off each tag in
   the browser itself** with PaddleOCR, so there is no OCR service to run or pay for.
 - The **Uploaded files** button in the header lists every workbook ever loaded, what
@@ -366,7 +366,7 @@ buying, and the page shows:
 - up to **five sarees from your shop that look most like it** — weave, print,
   embroidery, colour — each with its own design code, seller, pieces on hand,
   pieces sold, pace a week, weeks to clear and movement;
-- **the verdict**: how many of them sell well (Fast, Steady, or sold out), the
+- **the verdict**: how many of them sell well (Fast, Medium or Steady), the
   closer ones counting more, and the pace sarees like it sell at;
 - **how long a quantity would take to sell**: type how many pieces you are
   thinking of, and it says how many weeks or months that is at that pace;
@@ -420,10 +420,20 @@ With no full-period export loaded, pace is the daily files' average.
 **Sold.** The year so far from the newest full-period export, plus the daily
 files dated on or after the day it was run.
 
-**Movement.** Fast, Steady, Slow and Dead are built on how many weeks the stock
-on hand would take to clear at that pace — a line bought in September that has
-moved 40% in three weeks is fast; the same 40% over eight months is not. The
-weeks themselves are no longer shown as a column.
+**Movement.** From the 15-day sell-through below:
+
+| Sell-through in 15 days | Movement |
+|---|---|
+| 90–100% | Fast |
+| 75–90% | Medium |
+| 40–75% | Steady |
+| 20–40% | Slow |
+| under 20% | Dead |
+
+Until there are 15 days of daily files up to the latest stock count, every line
+is under **Others**; so is a line with nothing on hand and nothing sold in those
+days. Should I buy? counts Fast, Medium and Steady as selling well, and while a
+line is under Others it falls back on the line's pace.
 
 **% sales.** Of every piece that came in, the share sold: Sold ÷ (Sold + On hand).
 

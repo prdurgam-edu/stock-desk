@@ -6,8 +6,8 @@
   --ink:#16140f; --ink-2:#554f45; --ink-3:#8b8176;
   --rule:#e4ddd3; --rule-2:#cdc3b5;
   --accent:#5068de; --accent-soft:#eceefb;
-  --fast:#0f8257; --steady:#5068de; --slow:#a8820a; --dead:#ce2f57;
-  --fast-s:#e4f2eb; --steady-s:#eceefb; --slow-s:#f8f0d9; --dead-s:#fbe8ec;
+  --fast:#0f8257; --medium:#1b8a9c; --steady:#5068de; --slow:#a8820a; --dead:#ce2f57;
+  --fast-s:#e4f2eb; --medium-s:#e0f1f4; --steady-s:#eceefb; --slow-s:#f8f0d9; --dead-s:#fbe8ec;
   --display:"Fraunces",Georgia,"Times New Roman",serif;
   --body:"Libre Franklin",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -20,8 +20,8 @@
   --ink:#f2eee8; --ink-2:#b2a99e; --ink-3:#847b71;
   --rule:#2e2b33; --rule-2:#403c46;
   --accent:#7288e4; --accent-soft:#232942;
-  --fast:#28a070; --steady:#7288e4; --slow:#b38a24; --dead:#dd6376;
-  --fast-s:#132a21; --steady-s:#1e2440; --slow-s:#2a2211; --dead-s:#31191f;
+  --fast:#28a070; --medium:#3fb0c2; --steady:#7288e4; --slow:#b38a24; --dead:#dd6376;
+  --fast-s:#132a21; --medium-s:#122a2f; --steady-s:#1e2440; --slow-s:#2a2211; --dead-s:#31191f;
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
   color-scheme:dark;
 }}
@@ -30,8 +30,8 @@
   --ink:#f2eee8; --ink-2:#b2a99e; --ink-3:#847b71;
   --rule:#2e2b33; --rule-2:#403c46;
   --accent:#7288e4; --accent-soft:#232942;
-  --fast:#28a070; --steady:#7288e4; --slow:#b38a24; --dead:#dd6376;
-  --fast-s:#132a21; --steady-s:#1e2440; --slow-s:#2a2211; --dead-s:#31191f;
+  --fast:#28a070; --medium:#3fb0c2; --steady:#7288e4; --slow:#b38a24; --dead:#dd6376;
+  --fast-s:#132a21; --medium-s:#122a2f; --steady-s:#1e2440; --slow-s:#2a2211; --dead-s:#31191f;
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
   color-scheme:dark;
 }
@@ -602,3 +602,12 @@ img.imgwait{visibility:hidden}
 /* the day a photograph was sent on WhatsApp */
 .linestable td.thumb .sent{display:block;font-size:11px;color:var(--ink-3);margin-top:1px}
 .ph .cap .sent{font-size:11.5px;color:var(--ink-3);margin:2px 0}
+
+/* Medium (75-90% sold in 15 days) and Others (not enough days yet) */
+.tile.medium{border-left-color:var(--medium)} .tile.others{border-left-color:var(--rule-2)}
+.pill.medium{background:var(--medium-s);color:var(--medium)}
+.pill.others{background:var(--sunk);color:var(--ink-3)}
+tr.medium .spark path{stroke:var(--medium)} tr.medium .spark .fillp{fill:var(--medium)}
+#linesView .grp.medium{border-left-color:var(--medium)} #linesView .grp.others{border-left-color:var(--rule-2)}
+.ptile.medium{border-top-color:var(--medium)} .ptile.others{border-top-color:var(--rule-2)}
+.bm.medium{border-left-color:var(--medium)}

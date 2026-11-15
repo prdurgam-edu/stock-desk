@@ -22,7 +22,7 @@
   var CFG = window.NARSINGH_CONFIG || {};
   var API = String(CFG.api || '').replace(/\/+$/, '');
   var $ = function (id) { return document.getElementById(id); };
-  var LBL = { fast: 'Fast', steady: 'Steady', slow: 'Slow', dead: 'Dead', soldout: 'Sold out' };
+  var LBL = { fast: 'Fast', medium: 'Medium', steady: 'Steady', slow: 'Slow', dead: 'Dead', others: 'Others', soldout: 'Sold out' };
   var MAX = 5;            // designs shown
   var state = null, A = null, lines = {}, photos = {}, last = null, tagged = 0;
   var removed = {}, extra = 0;   // look-alikes you ruled out; how many more you asked to see
@@ -179,7 +179,14 @@
   }
 
   /* ---------------- the verdict ---------------- */
-  function good(l) { return l.status === 'fast' || l.status === 'steady' || (l.status === 'soldout' && l.sold > 0); }
+  /* Sells well: Fast, Medium or Steady by 15-day sell-through. A line still
+     under Others (not yet 15 days of daily files) is judged on its pace. */
+  function good(l) {
+    if (l.status === 'fast' || l.status === 'medium' || l.status === 'steady') return true;
+    if (l.status !== 'others') return false;
+    var p = l.paceStatus;
+    return p === 'fast' || p === 'steady' || (p === 'soldout' && l.sold > 0);
+  }
   function verdictOf(ds) {
     var best = ds[0].score, wsum = 0, wgood = 0, pace = 0, wpace = 0, thru = 0, wthru = 0, votes = {};
     ds.forEach(function (d) {
@@ -263,12 +270,12 @@
     } else {
       var v = verdictOf(ds);
       var c = CALL[v.call];
-      var mix = ['fast', 'steady', 'slow', 'dead', 'soldout'].filter(function (k) { return v.votes[k]; })
+      var mix = ['fast', 'medium', 'steady', 'slow', 'dead', 'others'].filter(function (k) { return v.votes[k]; })
         .map(function (k) { return '<span class="pill ' + k + '">' + v.votes[k] + ' ' + LBL[k] + '</span>'; }).join(' ');
       $('buyVerdict').innerHTML =
         '<div class="v-call ' + v.call + '">' + c[0] + '</div>' +
         '<p class="v-why">' + c[1] + ' <b>' + v.count + ' of the ' + v.of + '</b> look-alike' + (v.of === 1 ? '' : 's') +
-          ' sell' + (v.count === 1 ? 's' : '') + ' well (Fast, Steady or sold out)' +
+          ' sell' + (v.count === 1 ? 's' : '') + ' well (Fast, Medium or Steady)' +
           (v.of > 1 ? ', and the closest count the most.' : '.') + '</p>' +
         '<div class="v-mix">' + mix + '</div>' +
         '<dl class="v-nums">' +
