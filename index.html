@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261115b">
+<link rel="stylesheet" href="styles.css?v=20261115f">
 
 <!-- the settings: config.js, shared by every page -->
 <script src="config.js?v=20261114c"></script>
@@ -104,16 +104,8 @@
       </div>
       <input type="search" id="q" placeholder="Search a design code or seller" aria-label="Search lines">
       <select id="sellerFilter" aria-label="Filter by seller"><option value="">Every seller</option></select>
-      <!-- one question each, no two giving the same order: what sells, where
-           pieces pile up, what share of stock has sold, what sold in the last
-           15 days, and finding a code. Sell-through appears with daily files. -->
-      <select id="sortBy" aria-label="Sort lines">
-        <option value="sold">Best sellers &middot; most pieces sold</option>
-        <option value="bal">Most stock &middot; most pieces on hand</option>
-        <option value="pct">Highest % sales &middot; most of what came in sold</option>
-        <option value="st15">Best sell-through</option>
-        <option value="ref">Design code A to Z</option>
-      </select>
+      <!-- what kind of piece: read off the tags, or set in a line; sort by the column headings -->
+      <select id="catFilter" aria-label="Filter by category"><option value="">Every category</option></select>
       <button class="iconbtn hidden" id="photoOnly" type="button" aria-pressed="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
           <rect x="3" y="5.5" width="18" height="13" rx="2"/><circle cx="9" cy="10.5" r="1.8"/>
@@ -259,7 +251,7 @@
 <script src="compute.js?v=20261115e"></script>
 <script src="pieces.js?v=20261114c"></script>
 <script src="matcher.js?v=20261114c"></script>
-<script src="app.js?v=20261115e"></script>
+<script src="app.js?v=20261115f"></script>
 <script src="buy.js?v=20261115b"></script>
 </body>
 </html>

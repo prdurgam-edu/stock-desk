@@ -455,6 +455,14 @@ refused, with a note to rename it, because taken as today it would spoil the
 movement of every export around it. The groups fill in once the exports on
 record reach 15 days back from the newest.
 
+**Category.** Each line has a category: Saree, Pattu Saree, Half Saree, Pattu
+Pavada, Dupatta, Lehenga, Dress Material, Kurti, Readymade Dress, Blouse or
+Others. It is read off the tag photographs linked to the design (the word the
+tag prints after "Narsingh since 1964"; the one most of its tags show), and can
+be set by hand with the dropdown under the design code in the lines, which then
+always wins. A design with neither is Others. The **Every category** chooser
+above the lines shows one category at a time; sort by the column headings.
+
 **Photo date.** Under each saree in the table, and on every photo card, the day
 the photograph was sent on WhatsApp, as dd/mm/yy — from the chat export when it is in the zip,
 otherwise from the photo's file name.

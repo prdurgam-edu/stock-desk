@@ -611,3 +611,7 @@ tr.medium .spark path{stroke:var(--medium)} tr.medium .spark .fillp{fill:var(--m
 #linesView .grp.medium{border-left-color:var(--medium)} #linesView .grp.others{border-left-color:var(--rule-2)}
 .ptile.medium{border-top-color:var(--medium)} .ptile.others{border-top-color:var(--rule-2)}
 .bm.medium{border-left-color:var(--medium)}
+/* category of each line: read off its tags, or picked here */
+.catsel{display:block;margin-top:5px;font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--rule);border-radius:6px;background:var(--card);color:var(--ink-2);max-width:100%}
+.catsel.mine{border-color:var(--accent);color:var(--ink)}
+.ptile .catsel{margin:4px 0}

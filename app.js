@@ -8,9 +8,9 @@
   var validCodes = {};        // every design code the workbook knows, normalised
   var engineNote = false;
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
-  var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
+  var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15e';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15f';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -177,10 +177,6 @@
     $('linesQual').textContent = '15-day sell-through';
 
     // sell-through needs daily files in the last 15 days; until then the choice would sort nothing
-    var thru = $('sortBy').querySelector('option[value="st15"]');
-    var hasThru = !!(A.sellWindow && A.sellWindow.files);
-    thru.hidden = thru.disabled = !hasThru;
-    if (!hasThru && filter.sort === 'st15') { filter.sort = 'sold'; filter.dir = -1; $('sortBy').value = 'sold'; }
 
     var sel = $('sellerFilter'), cur = sel.value;
     sel.innerHTML = '<option value="">Every seller</option>' + A.sellers.map(function (s) {
@@ -189,6 +185,7 @@
     sel.value = cur;
 
     buildThumbIndex();      // must precede renderLines, which reads it
+    fillCatFilter();        // and the categories it works out
     renderLines();
     renderSellers();
     renderPhotos();
@@ -207,6 +204,7 @@
     var rows = A.lines.filter(function (l) {
       if (filter.status && l.status !== filter.status) return false;
       if (filter.seller && (l.seller || 'Not yet mapped') !== filter.seller) return false;
+      if (filter.cat && catOf(l) !== filter.cat) return false;
       if (filter.photo && !thumbByDesign[l.key]) return false;
       if (q && (l.ref + ' ' + l.seller).toLowerCase().indexOf(q) < 0) return false;
       return true;
@@ -265,7 +263,7 @@
     var box = $('linesView'), by = {};
     linesRows.forEach(function (l) { (by[l.status] = by[l.status] || []).push(l); });
     // a narrow search opens what it found; otherwise groups stay as you left them
-    var narrowed = (filter.q.trim() || filter.seller || filter.photo) && linesRows.length <= 400;
+    var narrowed = (filter.q.trim() || filter.seller || filter.cat || filter.photo) && linesRows.length <= 400;
     groupRows = {};
     box.innerHTML = GROUPS.filter(function (k) { return by[k] && by[k].length; }).map(function (k) {
       var rows = by[k], bal = 0, sold = 0, pics = 0;
@@ -306,7 +304,7 @@
   function fillGroup(d) {
     d.querySelector('.gbody').innerHTML =
       '<div class="gscroll"><table class="linestable"><thead><tr>' +
-      sortHead('ref', 'Saree', 'thumbcol') + '<th>Last 14 days</th>' +
+      sortHead('ref', 'Design', 'thumbcol') + '<th>Last 14 days</th>' +
       sortHead('bal', 'On hand', 'r') + sortHead('sold', 'Sold', 'r') + sortHead('pct', '% sales', 'r') +
       sortHead('st15', 'Sell-through', 'r') + '<th>Movement</th>' +
       '</tr></thead><tbody></tbody></table></div>';
@@ -365,7 +363,7 @@
         (more > 0 ? '<span class="morepics" aria-hidden="true">+' + more + '</span>' : '') + '</span>' +
       '<figcaption>' +
         '<span class="top"><span class="ref">' + esc(l.ref) + '</span><span class="pill ' + l.status + '">' + LBL[l.status] + '</span></span>' +
-        '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span>' +
+        '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span>' + catSelect(l) +
         '<span class="nums"><b class="num">' + n(l.bal) + '</b> on hand &middot; <b class="num">' + n(l.sold) +
           '</b> sold &middot; ' + pct(l.pctSold) + ' sales</span>' +
         '<span class="clear">Sell-through: ' + pct(l.sellThrough15) + (sent ? ' &middot; photo ' + sent : '') + '</span>' +
@@ -408,7 +406,8 @@
         : '<span class="none" title="No photograph linked yet"></span>') +
         '<span class="ref">' + esc(l.ref) + '</span>' +
         '<span class="sell">' + esc(l.seller || 'seller not mapped') + '</span>' +
-        (pid && sentDay(photoById(pid)) ? '<span class="sent">Photo ' + sentDay(photoById(pid)) + '</span>' : '') + '</td>' +
+        (pid && sentDay(photoById(pid)) ? '<span class="sent">Photo ' + sentDay(photoById(pid)) + '</span>' : '') +
+        catSelect(l) + '</td>' +
       // data-l names each number, for the phone layout, where rows become cards
       '<td class="spk">' + sparkline(l.series) + '</td>' +
       '<td class="r m" data-l="On hand">' + n(l.bal) + '</td>' +
@@ -572,8 +571,77 @@
       body + '</figcaption></figure>';
   }
 
+  /* ---------------- categories ----------------
+     The shop's tags print what the piece is just after "Narsingh since 1964":
+     SAREE, PATTU SAREE, HALF SAREE, PAVDA... A design takes the category most
+     of its tag photographs show. Anything set by hand in the lines wins; a
+     design with neither is Others. */
+  var CATS = ['Saree', 'Pattu Saree', 'Half Saree', 'Pattu Pavada', 'Dupatta', 'Lehenga',
+              'Dress Material', 'Kurti', 'Readymade Dress', 'Blouse', 'Others'];
+  var CAT_WORDS = [
+    ['Half Saree', /HALF\s*SAR/],
+    ['Pattu Saree', /PATTU\s*SAR/],
+    ['Pattu Pavada', /PAVA?DA|PAVADAI|LANGA\b|LANGHA/],
+    ['Dupatta', /DU+P+A?T+A\b|DUPTA\b/],
+    ['Lehenga', /LEH[AE]N?GA|LEHNGA|GHAGRA|CHANIYA/],
+    ['Dress Material', /DRESS\s*MAT|UNSTITCH/],
+    ['Kurti', /KURT[IYA]\b/],
+    ['Readymade Dress', /\bDRESS\b|\bGOWN\b|FROCK|ANARKALI|SALWAR|\bSUIT\b/],
+    ['Saree', /\bSAR(EE|EF|ES|E|I)\b|SAREE/],
+    ['Blouse', /^(?!.*W\/B)(?!.*WITH\s*BLOUSE).*\bBLOUSE\b/]
+  ];
+  function catFromText(lines) {
+    var t = (lines || []).join(' ').toUpperCase();
+    for (var i = 0; i < CAT_WORDS.length; i++) if (CAT_WORDS[i][1].test(t)) return CAT_WORDS[i][0];
+    return null;
+  }
+  // each photograph remembers the category its own tag shows, once read
+  function tagCats() {
+    var changed = 0;
+    (state.photos || []).forEach(function (p) {
+      var r = readsCache[p.id];
+      if (!r || p.catAt === r.at) return;
+      var c = catFromText(r.lines);
+      if (c !== (p.cat || null)) changed++;
+      p.cat = c; p.catAt = r.at;
+    });
+    return changed;
+  }
+  var catByDesign = {};
+  function buildCats() {
+    catByDesign = {};
+    var votes = {};
+    (state.photos || []).forEach(function (p) {
+      if (!p.designKey || !p.cat) return;
+      var v = votes[p.designKey] || (votes[p.designKey] = {});
+      v[p.cat] = (v[p.cat] || 0) + 1;
+    });
+    Object.keys(votes).forEach(function (k) {
+      var v = votes[k];
+      catByDesign[k] = Object.keys(v).sort(function (a, b) { return v[b] - v[a] || CATS.indexOf(a) - CATS.indexOf(b); })[0];
+    });
+    var set = state.cats || {};
+    Object.keys(set).forEach(function (k) { catByDesign[k] = set[k]; });
+  }
+  function catOf(l) { return catByDesign[l.key] || 'Others'; }
+  function fillCatFilter() {
+    var sel = $('catFilter'); if (!sel || !A) return;
+    var n_ = {}; A.lines.forEach(function (l) { var c = catOf(l); n_[c] = (n_[c] || 0) + 1; });
+    sel.innerHTML = '<option value="">Every category</option>' + CATS.filter(function (c) { return n_[c]; }).map(function (c) {
+      return '<option value="' + c + '"' + (filter.cat === c ? ' selected' : '') + '>' + c + ' (' + n(n_[c]) + ')</option>';
+    }).join('');
+    if (filter.cat && !n_[filter.cat]) { filter.cat = ''; sel.value = ''; }
+  }
+  function catSelect(l) {
+    var c = catOf(l), mine = !!(state.cats || {})[l.key];
+    return '<select class="catsel' + (mine ? ' mine' : '') + '" data-cat-for="' + esc(l.key) + '" aria-label="Category of ' + esc(l.ref) + '"' +
+      ' title="' + (mine ? 'Set by hand' : catByDesign[l.key] ? 'Read off its tag' : 'Not recognised yet') + '">' +
+      CATS.map(function (x) { return '<option' + (x === c ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>';
+  }
+
   function buildThumbIndex() {
     thumbByDesign = {}; picsByDesign = {};
+    buildCats();
     var groups = {};
     (state.photos || []).forEach(function (p) {
       if (p.designKey) (groups[p.designKey] || (groups[p.designKey] = [])).push(p);
@@ -949,7 +1017,7 @@
     clearTimeout(pollTimer);
     if (!cloudReading || !state) return Promise.resolve();
     return fetchReads().then(function () {
-      var changed = applyReads(false);
+      var changed = applyReads(false) + tagCats();
       var left = waitingCount();
       if (changed) {
         Store.backend.save(state).catch(function () {});
@@ -1632,11 +1700,21 @@
     });
     $('q').addEventListener('input', function () { filter.q = this.value; renderLines(); });
     $('sellerFilter').addEventListener('change', function () { filter.seller = this.value; renderLines(); });
-    $('sortBy').addEventListener('change', function () {
-      filter.sort = this.value;
-      // the two alphabetical choices read forwards; the rest are biggest first
-      filter.dir = (this.value === 'seller' || this.value === 'all' || this.value === 'ref') ? 1 : -1;
-      renderLines();
+    $('catFilter').addEventListener('change', function () { filter.cat = this.value; renderLines(); });
+    // a category picked in a line is that design's from now on
+    $('linesView').addEventListener('change', function (e) {
+      var sel = e.target.closest && e.target.closest('select[data-cat-for]');
+      if (!sel) return;
+      var k = sel.dataset.catFor;
+      state.cats = state.cats || {};
+      state.cats[k] = sel.value;
+      buildCats(); fillCatFilter();
+      sel.classList.add('mine'); sel.title = 'Set by hand';
+      Store.backend.save(state).then(function () {
+        status((state.refs[k] || k) + ' is now ' + sel.value + '.', 'ok');
+      }, function (err) { status('Could not save the category: ' + (err.message || err), 'err'); });
+      // a line that no longer fits the category shown leaves the list
+      if (filter.cat && filter.cat !== sel.value) renderLines();
     });
     // the column headings inside every movement group sort, as before
     $('linesView').addEventListener('click', function (e) {
@@ -1646,8 +1724,6 @@
       if (filter.sort === 'all' && k === 'ref') filter.sort = 'ref';
       filter.dir = (filter.sort === k) ? -filter.dir : (k === 'ref' ? 1 : -1);
       filter.sort = k;
-      // keep the chooser honest, but leave it alone for columns it cannot name
-      if ($('sortBy').querySelector('option[value="' + k + '"]')) $('sortBy').value = k;
       renderLines();
     });
     document.querySelectorAll('#viewSwitch button').forEach(function (b) {
@@ -1710,9 +1786,10 @@
         : 'Ready. Add today\'s stock report to begin.', 'ok');
       if (cloudReading) {
         fetchReads().then(function () {
-          if (applyReads(false)) {
+          var tagged = tagCats();
+          if (applyReads(false) || tagged) {
             Store.backend.save(state).catch(function () {});
-            renderPhotos(); renderLines();
+            renderPhotos(); renderLines(); fillCatFilter();
           }
           // anything handed over more than an hour ago and still not read is
           // handed over again: the queue keeps nothing for ever
