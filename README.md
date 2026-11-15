@@ -400,8 +400,8 @@ your own sales, not a promise: a saree unlike anything you stock says so.
 **Manually unmapped**, **Manually mapped** and **System labeled** (newest
 photographs needing a code stay on the Stock desk under *Tag photographs*).
 
-**All photos** shows every photograph kept in the cloud, newest first, with its
-design code and the day it was sent. Tick photographs one by one, or **Select
+**All photos** shows every photograph kept in the cloud in upload order, first one first, with its
+design code, the day it was sent on WhatsApp and the day it was uploaded. Tick photographs one by one, or **Select
 all**, then **Delete selected** and press again within four seconds: they are
 removed from the history and deleted from the cloud, with their readings and
 the descriptions *Should I buy?* compares against.

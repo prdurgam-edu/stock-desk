@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15l';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15n';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -497,12 +497,16 @@
   }
 
   /* ---------------- All photos: every photograph in the cloud ----------------
-     Newest first, a page at a time. Ticked ones can be deleted together: they
+     In upload order, first one first, a page at a time. Ticked ones can be deleted together: they
      go from the history first, then from the cloud with their readings and
      looks, so nothing is left pointing at a picture that is gone. */
   var galPicked = {}, galShown = 0, galArmed = null, GAL_PAGE = 120;
   function galList() {
-    return (state.photos || []).slice().sort(function (a, b) { return (b.sentAt || 0) - (a.sentAt || 0) || (a.name < b.name ? 1 : -1); });
+    // first uploaded first; within one upload (a zip), in the order WhatsApp sent them
+    var at = function (p) { return p.addedAt || ''; };
+    return (state.photos || []).slice().sort(function (a, b) {
+      return at(a) < at(b) ? -1 : at(a) > at(b) ? 1 : (a.sentAt || 0) - (b.sentAt || 0) || (a.seq || 0) - (b.seq || 0) || (a.name < b.name ? -1 : 1);
+    });
   }
   function renderGallery(reset) {
     var box = $('gallery'); if (!box || !state) return;
@@ -516,7 +520,9 @@
       return '<label class="gtile' + (on ? ' on' : '') + '">' +
         '<input type="checkbox" data-gal="' + esc(p.id) + '"' + (on ? ' checked' : '') + ' aria-label="Select ' + esc(p.name) + '">' +
         '<span class="pic"><img data-pid="' + esc(p.id) + '" alt="' + esc(p.name) + '" loading="lazy"></span>' +
-        '<span class="gcap"><b>' + (l ? esc(l) : 'no code') + '</b><span class="gd">' + (sentDay(p) || '&nbsp;') + '</span></span></label>';
+        '<span class="gcap"><b>' + (l ? esc(l) : 'no code') + '</b>' +
+          '<span class="gd">Sent ' + (sentDay(p) || MDASH) + '</span>' +
+          '<span class="gd">Uploaded ' + (p.addedAt ? sentDay({ sentAt: Date.parse(p.addedAt) }) : MDASH) + '</span></span></label>';
     }).join('') : '<p class="muted">No photographs in the cloud.</p>';
     $('galMoreBox').innerHTML = galShown < list.length
       ? '<button type="button" class="iconbtn" id="galMore">Show more <span class="count">' + n(list.length - galShown) + '</span></button>' : '';
