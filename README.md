@@ -443,6 +443,18 @@ from today's stock plus what sold, less what came in, in the daily files of
 those days. Days without a daily file count as no movement, and the note above
 the table says how many of the 15 days have one.
 
+**Period exports sent day to day.** When the shop sends a full-period export
+every day instead of daily files, each one less the one before gives what came
+in and what sold between them, line by line, and that is used exactly like a
+daily file: for sell-through, the movement groups, the trend chart and the
+last-14-days sparklines. The day each export was taken comes from its file name
+(`ASR GS & S 14-11-26.xlsx`, `… 14.11.26.xlsx`). Exports can be uploaded in any
+order; one older than another already in makes the page read them all again in
+date order. A name carrying a date still to come (`13.12.26` for `13.11.26`) is
+refused, with a note to rename it, because taken as today it would spoil the
+movement of every export around it. The groups fill in once the exports on
+record reach 15 days back from the newest.
+
 **Photo date.** Under each saree in the table, and on every photo card, the day
 the photograph was sent on WhatsApp, as dd/mm/yy — from the chat export when it is in the zip,
 otherwise from the photo's file name.

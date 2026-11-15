@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15d';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15e';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -138,7 +138,7 @@
     var stuck = A.pieces.slow + A.pieces.dead;
     $('headline').innerHTML = [
       ['Stock on hand', n(A.onHand), n(A.lines.length) + ' design lines'],
-      ['Sold in the days recorded', n(A.soldObs), A.observedDays + (A.observedDays === 1 ? ' day' : ' days') + ' of files'],
+      ['Sold in the days recorded', n(A.soldObs), A.coverFrom ? fmtDate(A.coverFrom) + ' to ' + fmtDate(A.asOf) : 'one file so far'],
       ['Fast', n(A.pieces.fast), BAND_NOTE.fast],
       ['Slow or dead', n(stuck), A.onHand ? Math.round(stuck / A.onHand * 100) + '% of the floor' : '', 'alarm'],
       ['As of', fmtDate(A.asOf), A.asOf ? A.asOf.slice(0, 4) : '']
@@ -147,7 +147,9 @@
         '<div class="v num">' + h[1] + '</div><div class="n">' + esc(h[2]) + '</div></div>';
     }).join('');
 
-    $('trendQual').textContent = A.observedDays + ' day' + (A.observedDays === 1 ? '' : 's') + ' recorded';
+    $('trendQual').textContent = A.periodSteps
+      ? A.dates.length + ' step' + (A.dates.length === 1 ? '' : 's') + ' between files'
+      : A.observedDays + ' day' + (A.observedDays === 1 ? '' : 's') + ' recorded';
     lineChart($('trendChart'), A.trend);
 
     $('tiles').innerHTML = MOVES.map(function (k) {
@@ -165,12 +167,13 @@
     var W = A.sellWindow || {};
     $('tilesNote').textContent = !A.asOf ? ''
       : W.ready
-      ? 'Grouped by sell-through over the 15 days to ' + fmtDate(A.asOf) + ': pieces sold in those days, out of those on hand when they began. ' +
-        (W.files >= W.days ? 'Every one of the 15 days has a daily file.'
+      ? 'Grouped by sell-through from ' + fmtDate(W.from) + ' to ' + fmtDate(A.asOf) + ': pieces sold in those days, out of those on hand when they began. ' +
+        (W.fromPeriods ? 'Worked out from the period exports taken over those days, each one less the one before.'
+          : W.files >= W.days ? 'Every one of the 15 days has a daily file.'
           : W.files + ' of the 15 days have a daily file; days without one count as no sales.')
-      : 'Every line waits under Others until there are 15 days of daily files up to ' + fmtDate(A.asOf) +
-        (A.observedDays ? ' (' + dn + ' so far, from ' + fmtDate(A.dates[0]) + ').' : ' (none yet).') +
-        ' Upload the daily file each day and the groups fill in.';
+      : 'Every line waits under Others until the files on record reach 15 days back from ' + fmtDate(A.asOf) +
+        ': period exports taken day to day (or daily files). ' +
+        (A.coverFrom ? 'They now go back to ' + fmtDate(A.coverFrom) + '.' : 'Upload the next period export and it starts counting.');
     $('linesQual').textContent = '15-day sell-through';
 
     // sell-through needs daily files in the last 15 days; until then the choice would sort nothing
@@ -196,7 +199,7 @@
       ' &middot; seller map covers ' + n(A.mappedSellers) + ' designs<br>' +
       'Build ' + BUILD + ' &middot; tags read by ' + esc(Matcher.engine || 'hand') + '<br>' +
       'Movement is by 15-day sell-through: Fast 90\u2013100%, Medium 75\u201390%, Steady 40\u201375%, Slow 20\u201340%, Dead under 20%. ' +
-      'Others: not yet 15 days of daily files, or nothing on hand or sold in those days.';
+      'Others: files not yet reaching 15 days back, or nothing on hand or sold in those days.';
   }
 
   function visibleLines() {
@@ -255,7 +258,7 @@
   function groupNote(k) {
     if (BAND_NOTE[k]) return BAND_NOTE[k];
     return A.sellWindow && A.sellWindow.ready ? 'nothing on hand or sold in the 15 days'
-      : 'waiting for 15 days of daily files';
+      : 'waiting for 15 days of files';
   }
 
   function renderGroups() {
@@ -1134,11 +1137,19 @@
       fresh.photos = state.photos || [];
       Object.keys(state).forEach(function (k) { if (!(k in fresh)) fresh[k] = state[k]; });
       fresh.photos.forEach(function (p) { p.batchIsSeller = null; });   // the seller list may change
-      groups.forEach(function (g) {
-        g.recs.forEach(function (rec, i) {
-          Compute.ingest(fresh, g.sheets[i], { id: rec.id, name: rec.name, size: rec.size, rawId: rec.rawId, modified: rec.modified || null });
-          fresh.files[fresh.files.length - 1].addedAt = rec.addedAt;   // still uploaded when it was
-        });
+      delete fresh.outOfOrder;
+      // read in the order the stock was counted, so the movement between one
+      // period export and the next comes out right whatever order they came in
+      var all = [];
+      groups.forEach(function (g) { g.recs.forEach(function (rec, i) { all.push({ rec: rec, sh: g.sheets[i] }); }); });
+      all.sort(function (a, b) {
+        var da = a.rec.asOf || a.rec.from, db = b.rec.asOf || b.rec.from;
+        return da < db ? -1 : da > db ? 1 : a.rec.addedAt < b.rec.addedAt ? -1 : a.rec.addedAt > b.rec.addedAt ? 1 : 0;
+      });
+      all.forEach(function (x) {
+        var rec = x.rec;
+        Compute.ingest(fresh, x.sh, { id: rec.id, name: rec.name, size: rec.size, rawId: rec.rawId, modified: rec.modified || null });
+        fresh.files[fresh.files.length - 1].addedAt = rec.addedAt;   // still uploaded when it was
       });
       return fresh;
     });
@@ -1214,20 +1225,33 @@
         return readFile(f).then(function (buf) {
           var sheets = Compute.parseWorkbook(new Uint8Array(buf), f.name);
           if (!sheets.length) { skipped.push(f.name + ' (not an ASR stock report)'); return; }
+          // a date still to come in the name is a slip (13.12.26 for 13.11.26):
+          // taken as today it would sit after newer exports and spoil the movement
+          var named = Compute.dateFromName(f.name), today = new Date();
+          var todayIso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+          if (named && named > todayIso && sheets.some(function (sh) { return sh.kind === 'master'; })) {
+            var nd = named.split('-');
+            skipped.push(f.name + ' (its name says ' + nd[2] + '/' + nd[1] + '/' + nd[0].slice(2) +
+              ', a day still to come; rename it with the day it was taken and upload it again)');
+            return;
+          }
           // one id for the workbook itself, carried by every sheet taken from it,
           // so removing a file later can rebuild from the workbooks that remain
           var rawId = uid(), meta = { name: f.name, modified: f.lastModified || null };
           var repairs = {};
-          var fresh = sheets.filter(function (sh) {
-            var dup = state.files.filter(function (x) { return Compute.sameAs(x, sh, meta); })[0];
-            if (dup) {
-              skipped.push(f.name + ' ' + sh.sheet + ' (already loaded)');
-              // the same workbook again: keep a fresh copy of it, in case the
-              // first one never reached storage (removing a file needs it)
-              if (dup.rawId) repairs[dup.rawId] = true;
-            }
-            return !dup;
+          var dups = sheets.map(function (sh) {
+            return state.files.filter(function (x) { return Compute.sameAs(x, sh, meta); })[0] || null;
           });
+          var fresh = sheets.filter(function (sh, i) { return !dups[i]; });
+          // every sheet already in, all from one stored workbook: the same file
+          // again, so keep a fresh copy of it, in case the first never reached
+          // storage. (Last year's sheet repeats in every period export; that
+          // alone does not make it the same file, and its copy is left alone.)
+          if (!fresh.length) {
+            skipped.push(f.name + ' (already loaded)');
+            var ids = dups.map(function (d) { return d.rawId; });
+            if (ids[0] && ids.every(function (x) { return x === ids[0]; })) repairs[ids[0]] = true;
+          }
           var repaired = Object.keys(repairs).reduce(function (c, id) {
             return c.then(function () {
               // only a copy that was actually missing counts as put back
@@ -1259,6 +1283,13 @@
     });
 
     chain.then(function () {
+      if (!state.outOfOrder) return;
+      // an export older than one already in: read them all again, in date order
+      delete state.outOfOrder;
+      status('Putting the period exports in date order...', 'busy');
+      return rebuildWithout(null).then(function (fresh) { state = fresh; })
+        .catch(function () {});   // without every workbook, keep what was read
+    }).then(function () {
       status('Computing...', 'busy');
       queue = { xlsx: [], photo: [] }; showQueue();
       return persistAndDraw().then(function () { checkCopies(); });

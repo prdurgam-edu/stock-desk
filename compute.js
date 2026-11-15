@@ -169,8 +169,27 @@
         if (o.seller) state.sellers[o.key] = o.seller;   // the seller map lives here
       }
       asOf = masterAsOf(sheet, fileMeta);
-      var newer = !state.cumulative || asOf > state.cumulative.asOf ||
-                  (asOf === state.cumulative.asOf && sheet.to > state.cumulative.to);
+      var prev = state.cumulative;
+      var newer = !prev || asOf > prev.asOf ||
+                  (asOf === prev.asOf && sheet.to > prev.to);
+      var samePeriod = prev && prev.from === sheet.from && prev.to === sheet.to;
+      /* Period exports sent day after day: what moved between the last one and
+         this one is this one's totals less the last one's, line by line. It is
+         kept like a daily file, dated this export's day and marked as spanning
+         the days since the last, so sell-through and the charts can use it.
+         (A real daily file for the same day is left as it is.) */
+      if (newer && samePeriod && asOf > prev.asOf && !(state.days[asOf] && !state.days[asOf].p)) {
+        var dmv = {}, dIn = 0, dOut = 0;
+        Object.keys(rows).forEach(function (k) {
+          var was = prev.rows[k] || { tin: 0, tout: 0 };
+          var di = Math.max(0, rows[k].tin - was.tin), dO = Math.max(0, rows[k].tout - was.tout);
+          if (di || dO) { dmv[k] = [di, dO]; dIn += di; dOut += dO; }
+        });
+        state.days[asOf] = { mv: dmv, tot: [dIn, dOut], lines: Object.keys(dmv).length, p: 1, span: daysBetween(prev.asOf, asOf) };
+      }
+      // an export older than one already in, for the same period: the gaps
+      // either side of it can only be worked out by reading them all in order
+      if (samePeriod && asOf < prev.asOf) state.outOfOrder = true;
       if (newer) {
         state.cumulative = { from: sheet.from, to: sheet.to, asOf: asOf, rows: rows };
       }
@@ -198,12 +217,21 @@
     var slowWeeks = (opts && opts.slowAfterWeeks) || 26;
     var fastWeeks = (opts && opts.fastUnderWeeks) || 8;
     var dates = Object.keys(state.days).sort();
-    var nDays = dates.length;
-    var asOf = state.latest ? state.latest.date : (dates[nDays - 1] || null);
+    // real daily files, as against movement worked out between two period exports
+    var realDates = dates.filter(function (d) { return !state.days[d].p; });
+    var nDays = realDates.length;
+    var asOf = state.latest ? state.latest.date : (dates[dates.length - 1] || null);
     var cum = state.cumulative;
     // period: the full-period export alone; blend: it and the daily files;
     // daily: daily files alone (no full-period export loaded)
     var basis = cum ? (nDays ? 'blend' : 'period') : 'daily';
+    // the day before the first movement on record: a daily file covers its own
+    // day, movement between two period exports the days since the earlier one
+    var spanOf = function (d) { return state.days[d].p ? (state.days[d].span || 1) : 1; };
+    var coverFrom = dates.length ? dates.reduce(function (m, d) {
+      var b = iso(new Date(new Date(d + 'T00:00:00').getTime() - spanOf(d) * 86400000));
+      return m && m < b ? m : b;
+    }, null) : null;
     var cumAsOf = cum ? (cum.asOf || cum.to) : null;
 
     // every design we know of
@@ -216,18 +244,26 @@
     var spark = dates.slice(-14);
     // sell-through looks at the last fifteen days up to the latest stock count
     var win = asOf ? dates.filter(function (d) { return d <= asOf && daysBetween(d, asOf) < SELL_DAYS; }) : [];
-    // the movement groups need a full 15 days of daily files behind the latest
-    // stock count; until then every line waits under Others
-    var ready15 = !!(win.length && dates.length && daysBetween(dates[0], asOf) >= SELL_DAYS - 1);
+    // the movement groups need 15 days of movement behind the latest stock
+    // count; until then every line waits under Others
+    var ready15 = !!(win.length && coverFrom && daysBetween(coverFrom, asOf) >= SELL_DAYS);
+    // the days the window really spans: movement between two period exports
+    // counts whole, so it can reach back further than 15
+    var winFrom = win.length ? win.reduce(function (m, d) {
+      var b = iso(new Date(new Date(d + 'T00:00:00').getTime() - (spanOf(d) - 1) * 86400000));
+      return m && m < b ? m : b;
+    }, null) : null;
     var periodWeeks = cum ? Math.max(1, daysBetween(cum.from, cum.asOf || cum.to) / 7) : null;
 
     var lines = Object.keys(keys).map(function (k) {
-      var soldObs = 0, inObs = 0, last = null, series = [], soldSince = 0;
+      var soldObs = 0, inObs = 0, last = null, series = [], soldSince = 0, soldDaily = 0;
       for (var i = 0; i < dates.length; i++) {
-        var m = state.days[dates[i]].mv[k];
+        var day = state.days[dates[i]], m = day.mv[k];
         var sold = m ? m[1] : 0;
         soldObs += sold; inObs += m ? m[0] : 0;
         if (sold > 0) last = dates[i];
+        if (day.p) continue;     // already inside the period export's own totals
+        soldDaily += sold;
         // the full-period export was run on cumAsOf, before that day's sales:
         // daily files from then on are sales it does not yet hold
         if (cumAsOf && dates[i] >= cumAsOf) soldSince += sold;
@@ -253,9 +289,9 @@
       // a design the full-period export has never seen (it arrived since) has
       // no long run to lean on: its daily files are all there is
       var periodRate = c && periodWeeks ? c.tout / (periodWeeks * 7) : null;
-      if (periodRate != null && nDays) ratePerDay = (periodRate * PRIOR_DAYS + soldObs) / (PRIOR_DAYS + nDays);
+      if (periodRate != null && nDays) ratePerDay = (periodRate * PRIOR_DAYS + soldDaily) / (PRIOR_DAYS + nDays);
       else if (periodRate != null) ratePerDay = periodRate;
-      else ratePerDay = nDays ? soldObs / nDays : 0;
+      else ratePerDay = nDays ? soldDaily / nDays : 0;
 
       var cover = ratePerDay > 0 ? (bal / ratePerDay) / 7 : null;   // weeks
       var everSold = soldObs > 0 || (c && c.tout > 0);
@@ -268,7 +304,7 @@
       var st15 = win.length && open15 > 0 ? sold15 / open15 : null;
       var status = ready15 && st15 != null ? band(st15) : 'others';
 
-      var soldShown = cum ? (c ? c.tout : 0) + soldSince : soldObs;
+      var soldShown = cum ? (c ? c.tout : 0) + soldSince : soldDaily;
       return {
         key: k, ref: state.refs[k] || k, seller: state.sellers[k] || '',
         // % sales: of every piece that came in, how many have sold
@@ -277,7 +313,7 @@
         // what "Sold" means on the page: the year so far, from the full-period
         // export, plus the daily files that came after it; with no full-period
         // export, what the daily files recorded
-        sold: cum ? (c ? c.tout : 0) + soldSince : soldObs,
+        sold: cum ? (c ? c.tout : 0) + soldSince : soldDaily,
         soldCum: c ? c.tout : null, inCum: c ? c.tin : null,
         rate: ratePerDay, cover: cover, series: series,
         lastSale: last, idle: last && asOf ? daysBetween(last, asOf) : null,
@@ -325,7 +361,9 @@
                           weeks: periodWeeks ? Math.round(periodWeeks * 10) / 10 : null } : null,
       mappedSellers: Object.keys(state.sellers).length,
       // the daily files the 15-day sell-through rests on
-      sellWindow: { days: SELL_DAYS, files: win.length, from: win[0] || null, to: asOf, ready: ready15 },
+      sellWindow: { days: SELL_DAYS, files: win.length, from: winFrom, to: asOf, ready: ready15,
+                    fromPeriods: win.some(function (d) { return state.days[d].p; }) },
+      coverFrom: coverFrom, periodSteps: dates.length - realDates.length,
       slowWeeks: slowWeeks, fastWeeks: fastWeeks
     };
   }
