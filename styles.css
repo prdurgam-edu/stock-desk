@@ -616,3 +616,5 @@ tr.medium .spark path{stroke:var(--medium)} tr.medium .spark .fillp{fill:var(--m
 .catsel.mine{border-color:var(--accent);color:var(--ink)}
 .ptile .catsel{margin:4px 0}
 .chart .col{fill:var(--accent);opacity:.85}
+.chart .startday{fill:none;stroke:var(--rule-2);stroke-width:1;stroke-dasharray:3 3}
+.chart .startlab{font-size:10px}

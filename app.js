@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15h';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15i';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -63,7 +63,7 @@
      spread over the days it covers: one day for a daily file, the days since
      the last export for a period export, so two days' sales never pass for
      one day's, and gaps between files show as gaps. */
-  function lineChart(host, pts) {
+  function lineChart(host, pts, base) {
     if (!pts.length) {
       host.innerHTML = '<p class="muted">Upload a second period export (or a daily file) and the sales between them show here.</p>';
       return;
@@ -74,7 +74,10 @@
       // whole days: from the first day it covers to the end of its own day
       return { end: t(p.date) + DAY, start: t(p.date) - (span - 1) * DAY, span: span, perDay: p.out / span, inDay: (p.in || 0) / span, p: p };
     });
-    var t0 = Math.min.apply(null, bars.map(function (b) { return b.start; }));
+    // the first file is where the counting starts: its own day is on the axis
+    // too, marked, though what sold that day needs the file before it
+    var baseMs = base ? t(base) : null;
+    var t0 = Math.min.apply(null, bars.map(function (b) { return b.start; }).concat(baseMs != null ? [baseMs] : []));
     var t1 = Math.max.apply(null, bars.map(function (b) { return b.end; }));
     var W = Math.max(320, host.clientWidth || 560), H = 230;
     var padL = 46, padR = 12, padT = 14, padB = 30;
@@ -99,13 +102,20 @@
         '<rect class="hit" x="' + x0.toFixed(1) + '" y="' + padT + '" width="' + Math.max(6, x1 - x0).toFixed(1) + '" height="' + ih + '" data-i="' + i + '"/>';
     }).join('');
 
-    // up to six dates along the bottom, each under the middle of its day
-    var ndays = Math.round((t1 - t0) / DAY), nlab = Math.min(6, ndays);
-    var xlab = '';
-    for (var k = 0; k < nlab; k++) {
-      var di = nlab === 1 ? 0 : Math.round((ndays - 1) * k / (nlab - 1));
+    // every file's day along the bottom while they fit; past ten, six evenly
+    var ndays = Math.round((t1 - t0) / DAY), xlab = '', shown = {};
+    var marks = ndays <= 10 ? Array.apply(null, Array(ndays)).map(function (_, i) { return i; })
+      : [0, 1, 2, 3, 4, 5].map(function (k) { return Math.round((ndays - 1) * k / 5); });
+    marks.forEach(function (di) {
+      if (shown[di]) return; shown[di] = 1;
       var ms = t0 + di * DAY;
       xlab += '<text class="axis" x="' + x(ms + DAY / 2) + '" y="' + (H - 9) + '" text-anchor="middle">' + day(ms) + '</text>';
+    });
+    if (baseMs != null) {
+      var bx0 = x(baseMs) + gap / 2, bx1 = x(baseMs + DAY) - gap / 2;
+      rects = '<rect class="startday" x="' + bx0.toFixed(1) + '" y="' + padT + '" width="' + Math.max(1, bx1 - bx0).toFixed(1) + '" height="' + ih + '"/>' +
+        (bx1 - bx0 > 56 ? '<text class="axis startlab" x="' + ((bx0 + bx1) / 2).toFixed(1) + '" y="' + (padT + ih / 2) + '" text-anchor="middle">first file</text>' : '') +
+        '<rect class="hit" x="' + bx0.toFixed(1) + '" y="' + padT + '" width="' + Math.max(6, bx1 - bx0).toFixed(1) + '" height="' + ih + '" data-i="base"/>' + rects;
     }
 
     host.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
@@ -114,7 +124,13 @@
 
     host.querySelectorAll('.hit').forEach(function (el) {
       el.addEventListener('mouseenter', function () {
-        var b = bars[+el.dataset.i], r = el.getBoundingClientRect();
+        var r = el.getBoundingClientRect();
+        if (el.dataset.i === 'base') {
+          showTip('<b>' + fmtDate(base) + '</b><br>The first file on record: the count starts here.<br>' +
+            'What sold on this day needs the file from the day before.', r.left + r.width / 2, r.top + 40);
+          return;
+        }
+        var b = bars[+el.dataset.i];
         showTip(b.span === 1
           ? '<b>' + fmtDate(b.p.date) + '</b><br>' + n(b.p.out) + ' pieces sold' + (b.p.in ? '<br>' + n(b.p.in) + ' came in' : '')
           : '<b>' + day(b.start) + ' to ' + fmtDate(b.p.date) + '</b> (' + b.span + ' days)<br>' + n(b.p.out) + ' pieces sold, about ' +
@@ -173,8 +189,9 @@
         '<div class="v num">' + h[1] + '</div><div class="n">' + esc(h[2]) + '</div></div>';
     }).join('');
 
-    $('trendQual').textContent = A.coverFrom ? daysSpan() : '';
-    lineChart($('trendChart'), A.trend);
+    // the chart runs from the first file's day, so the heading does too
+    $('trendQual').textContent = A.coverFrom ? fmtDate(A.coverFrom) + ' to ' + fmtDate(A.asOf) : '';
+    lineChart($('trendChart'), A.trend, A.coverFrom);
 
     $('tiles').innerHTML = MOVES.map(function (k) {
       return '<button class="tile ' + k + '" type="button" data-s="' + k + '" aria-pressed="' +
@@ -1762,7 +1779,7 @@
     var rt;
     addEventListener('resize', function () {
       clearTimeout(rt);
-      rt = setTimeout(function () { if (A) lineChart($('trendChart'), A.trend); }, 180);
+      rt = setTimeout(function () { if (A) lineChart($('trendChart'), A.trend, A.coverFrom); }, 180);
     });
 
     Store.backend.load().then(function (s) {
