@@ -618,3 +618,21 @@ tr.medium .spark path{stroke:var(--medium)} tr.medium .spark .fillp{fill:var(--m
 /* the two lines: sold, and bought in */
 .chart .line.inn{stroke:var(--slow)} .chart .pt.inn{fill:var(--slow)}
 .chart .line.sold{stroke:var(--accent)} .chart .pt.sold{fill:var(--accent)}
+/* the tabs: four now, so on a phone they scroll sideways rather than squash */
+@media (max-width:700px){ .tabs{overflow-x:auto;scrollbar-width:none} .tabs button{flex:none;padding:11px 12px;white-space:nowrap} }
+/* All photos */
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.gtile{position:relative;display:block;background:var(--card);border:1px solid var(--rule);border-radius:var(--r-s);overflow:hidden;cursor:pointer}
+.gtile.on{border-color:var(--dead);box-shadow:0 0 0 2px var(--dead)}
+.gtile input{position:absolute;top:8px;left:8px;width:20px;height:20px;z-index:2;accent-color:var(--dead)}
+.gtile .pic{display:block;width:100%;aspect-ratio:1;background:var(--sunk)}
+.gtile .pic img{width:100%;height:100%;object-fit:cover;display:block}
+.gtile .gcap{display:block;padding:6px 8px;font-size:11.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gtile .gcap b{color:var(--ink);font-family:var(--mono);font-weight:600}
+.gal-bar{flex-wrap:wrap;gap:8px;margin-bottom:12px}
+#galDel{border-color:var(--dead);color:var(--dead)}
+#galDel.armed{background:var(--dead);color:var(--paper)}
+#galDel:disabled{opacity:.45}
+#galMoreBox{margin:14px 0}
+@media (max-width:700px){ .gal{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px} .gtile .gcap{font-size:10.5px;padding:4px 6px} }
+.gtile .gcap b,.gtile .gcap .gd{display:block;overflow:hidden;text-overflow:ellipsis}

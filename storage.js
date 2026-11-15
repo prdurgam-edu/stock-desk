@@ -291,6 +291,12 @@
           return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids }) };
         }, 'send the photographs for reading').then(function (r) { return r.json(); });
       },
+      // delete these photographs from the cloud, with their readings and looks
+      deletePhotos: function (ids) {
+        return call(base + '/api/photos/delete', function () {
+          return { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids }) };
+        }, 'delete the photographs').then(function (r) { return r.json(); });
+      },
       // which of these photographs never reached storage (or were lost)
       missingPhotos: function (ids) {
         return call(base + '/api/photos/missing', function () {

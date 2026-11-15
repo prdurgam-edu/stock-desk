@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261115j">
+<link rel="stylesheet" href="styles.css?v=20261115l">
 
 <!-- the settings: config.js, shared by every page -->
 <script src="config.js?v=20261114c"></script>
@@ -39,9 +39,11 @@
 
 <main class="wrap">
 
-  <!-- two tabs: the stock desk, and "Should I buy?" for the market -->
+  <!-- the tabs: the stock desk, the labels, every photograph, and "Should I buy?" for the market -->
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button type="button" role="tab" id="tabBtnDesk" data-tab="desk" aria-selected="true" aria-controls="tabDesk">Stock desk</button>
+    <button type="button" role="tab" id="tabBtnLabels" data-tab="labels" aria-selected="false" aria-controls="tabLabels">Labels</button>
+    <button type="button" role="tab" id="tabBtnPhotos" data-tab="photos" aria-selected="false" aria-controls="tabPhotos">All photos</button>
     <button type="button" role="tab" id="tabBtnBuy" data-tab="buy" aria-selected="false" aria-controls="tabBuy">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 7.5h12l-1 12.5H7z"/><path d="M9 9.5V6a3 3 0 0 1 6 0v3.5"/></svg>
       Should I buy?
@@ -141,6 +143,25 @@
     </div>
     <div class="photos" id="photos"></div>
 
+    <footer id="foot"></footer>
+  </div>
+
+  <div id="blank" class="empty">
+    <div class="big">Nothing computed yet</div>
+    <p>Add a stock report above and press Compute. Upload one file a day and this page builds its own history.</p>
+  </div>
+  </div>
+
+  <!-- ---------- labels: the tag photographs a design code was given to ---------- -->
+  <div id="tabLabels" role="tabpanel" aria-labelledby="tabBtnLabels" class="hidden">
+    <h2 id="unmappedHead">Manually unmapped</h2>
+    <p class="muted" id="unmappedNote" style="margin:-6px 0 14px"></p>
+    <div class="photos" id="unmapped"></div>
+
+    <h2 id="mappedHead">Manually mapped</h2>
+    <p class="muted" id="mappedNote" style="margin:-6px 0 14px"></p>
+    <div class="photos" id="mapped"></div>
+
     <h2 id="autoHead">System labeled</h2>
     <p class="muted" id="autoNote" style="margin:-6px 0 14px"></p>
     <div class="controls" id="autoControls">
@@ -153,22 +174,21 @@
       <span class="muted" id="autoProg"></span>
     </div>
     <div class="photos" id="autolist"></div>
-
-    <h2 id="mappedHead">Manually mapped</h2>
-    <p class="muted" id="mappedNote" style="margin:-6px 0 14px"></p>
-    <div class="photos" id="mapped"></div>
-
-    <h2 id="unmappedHead">Manually unmapped</h2>
-    <p class="muted" id="unmappedNote" style="margin:-6px 0 14px"></p>
-    <div class="photos" id="unmapped"></div>
-
-    <footer id="foot"></footer>
   </div>
 
-  <div id="blank" class="empty">
-    <div class="big">Nothing computed yet</div>
-    <p>Add a stock report above and press Compute. Upload one file a day and this page builds its own history.</p>
-  </div>
+  <!-- ---------- every photograph kept in the cloud ---------- -->
+  <div id="tabPhotos" role="tabpanel" aria-labelledby="tabBtnPhotos" class="hidden">
+    <h2 id="galHead">All photographs</h2>
+    <p class="muted" style="margin:-6px 0 14px">Every photograph kept in the cloud, newest first. Tick the ones to
+      delete, or select them all; deleting removes them from the cloud for good, with their readings and labels.</p>
+    <div class="controls gal-bar">
+      <button class="iconbtn" id="galAll" type="button">Select all</button>
+      <button class="iconbtn" id="galNone" type="button" disabled>Clear selection</button>
+      <button class="iconbtn danger" id="galDel" type="button" disabled>Delete selected</button>
+      <span class="muted" id="galMsg" role="status" aria-live="polite"></span>
+    </div>
+    <div class="gal" id="gallery"></div>
+    <div id="galMoreBox"></div>
   </div>
 
   <!-- ---------- Should I buy? ---------- -->
@@ -249,11 +269,11 @@
      older cached script. Bump it whenever app.js, styles.css or the others change. -->
 <script src="vendor/xlsx.full.min.js?v=20261114c"></script>
 <script src="vendor/jszip.min.js?v=20261114c"></script>
-<script src="storage.js?v=20261114i"></script>
+<script src="storage.js?v=20261115l"></script>
 <script src="compute.js?v=20261115h"></script>
 <script src="pieces.js?v=20261114c"></script>
 <script src="matcher.js?v=20261114c"></script>
-<script src="app.js?v=20261115k"></script>
-<script src="buy.js?v=20261115b"></script>
+<script src="app.js?v=20261115l"></script>
+<script src="buy.js?v=20261115l"></script>
 </body>
 </html>

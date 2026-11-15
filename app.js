@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15k';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15l';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -156,6 +156,7 @@
   function render() {
     // the "Should I buy?" tab works from the same history and analysis
     try { document.dispatchEvent(new CustomEvent('desk:data', { detail: { state: state, A: A } })); } catch (e) {}
+    if (!$('tabPhotos').classList.contains('hidden')) renderGallery();
     if (!A || !A.lines.length) {
       $('results').classList.add('hidden'); $('blank').classList.remove('hidden'); return;
     }
@@ -493,6 +494,68 @@
         if (u) { photoUrls[id] = u; img.src = u; }
       }).catch(function () {});
     });
+  }
+
+  /* ---------------- All photos: every photograph in the cloud ----------------
+     Newest first, a page at a time. Ticked ones can be deleted together: they
+     go from the history first, then from the cloud with their readings and
+     looks, so nothing is left pointing at a picture that is gone. */
+  var galPicked = {}, galShown = 0, galArmed = null, GAL_PAGE = 120;
+  function galList() {
+    return (state.photos || []).slice().sort(function (a, b) { return (b.sentAt || 0) - (a.sentAt || 0) || (a.name < b.name ? 1 : -1); });
+  }
+  function renderGallery(reset) {
+    var box = $('gallery'); if (!box || !state) return;
+    var list = galList();
+    if (reset || !galShown) galShown = Math.min(GAL_PAGE, list.length);
+    galShown = Math.min(Math.max(galShown, Math.min(GAL_PAGE, list.length)), list.length);
+    var picked = Object.keys(galPicked).length;
+    $('galHead').innerHTML = 'All photographs <span class="qual">' + n(list.length) + '</span>';
+    box.innerHTML = list.length ? list.slice(0, galShown).map(function (p) {
+      var on = !!galPicked[p.id], l = p.designKey ? (state.refs || {})[p.designKey] || p.designKey : null;
+      return '<label class="gtile' + (on ? ' on' : '') + '">' +
+        '<input type="checkbox" data-gal="' + esc(p.id) + '"' + (on ? ' checked' : '') + ' aria-label="Select ' + esc(p.name) + '">' +
+        '<span class="pic"><img data-pid="' + esc(p.id) + '" alt="' + esc(p.name) + '" loading="lazy"></span>' +
+        '<span class="gcap"><b>' + (l ? esc(l) : 'no code') + '</b><span class="gd">' + (sentDay(p) || '&nbsp;') + '</span></span></label>';
+    }).join('') : '<p class="muted">No photographs in the cloud.</p>';
+    $('galMoreBox').innerHTML = galShown < list.length
+      ? '<button type="button" class="iconbtn" id="galMore">Show more <span class="count">' + n(list.length - galShown) + '</span></button>' : '';
+    hydrate(box);
+    galBar();
+  }
+  function galBar() {
+    var k = Object.keys(galPicked).length;
+    $('galNone').disabled = !k;
+    $('galDel').disabled = !k;
+    if (!galArmed) $('galDel').textContent = k ? 'Delete ' + n(k) + ' selected' : 'Delete selected';
+  }
+  function galDisarm() { clearTimeout(galArmed); galArmed = null; $('galDel').classList.remove('armed'); galBar(); }
+  function deletePhotos(ids) {
+    var gone = {}; ids.forEach(function (id) { gone[id] = true; });
+    var before = (state.photos || []).length;
+    state.photos = (state.photos || []).filter(function (p) { return !gone[p.id]; });
+    // nothing left pointing at a picture that is gone
+    state.photos.forEach(function (p) {
+      if (p.linkedTo && gone[p.linkedTo]) p.linkedTo = null;
+      if (p.unmapped && p.unmapped.linkedTo && gone[p.unmapped.linkedTo]) p.unmapped.linkedTo = null;
+      if (p.prev && p.prev.linkedTo && gone[p.prev.linkedTo]) p.prev.linkedTo = null;
+      if (p.linkCands) p.linkCands = p.linkCands.filter(function (c) { return !gone[c.id]; });
+    });
+    ids.forEach(function (id) { delete photoUrls[id]; delete readsCache[id]; delete galPicked[id]; });
+    $('galMsg').textContent = 'Deleting ' + n(ids.length) + ' photograph' + (ids.length === 1 ? '' : 's') + MDASH;
+    return Store.backend.save(state).then(function () {
+      var chunks = [];
+      for (var i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200));
+      return chunks.reduce(function (c, part) {
+        return c.then(function () { return Store.backend.deletePhotos ? Store.backend.deletePhotos(part) : null; });
+      }, Promise.resolve());
+    }).then(function () {
+      var msg = 'Deleted ' + n(before - state.photos.length) + ' photograph' + (before - state.photos.length === 1 ? '' : 's') + ' from the cloud.';
+      $('galMsg').textContent = msg; status(msg, 'ok');
+      return persistAndDraw();
+    }).catch(function (e) {
+      $('galMsg').textContent = 'Could not delete: ' + ((e && e.message) || e) + '. Reload the page and try again.';
+    }).then(function () { renderGallery(); });
   }
 
   function renderSellers() {
@@ -1607,6 +1670,40 @@
       a.href = URL.createObjectURL(blob);
       a.download = 'narsingh-history-' + (A && A.asOf ? A.asOf : 'export') + '.json';
       a.click();
+    });
+
+    // All photos: open it, tick, select all, delete
+    document.addEventListener('desk:tab', function (e) { if (e.detail === 'photos' && state) renderGallery(); });
+    $('gallery').addEventListener('change', function (e) {
+      var cb = e.target.closest && e.target.closest('input[data-gal]');
+      if (!cb) return;
+      if (cb.checked) galPicked[cb.dataset.gal] = true; else delete galPicked[cb.dataset.gal];
+      cb.closest('.gtile').classList.toggle('on', cb.checked);
+      galDisarm();
+    });
+    $('galMoreBox').addEventListener('click', function (e) {
+      if (!(e.target.closest && e.target.closest('#galMore'))) return;
+      galShown += GAL_PAGE; renderGallery();
+    });
+    $('galAll').addEventListener('click', function () {
+      galList().forEach(function (p) { galPicked[p.id] = true; });
+      galDisarm(); renderGallery();
+      $('galMsg').textContent = 'All ' + n(Object.keys(galPicked).length) + ' selected, including those not shown yet.';
+    });
+    $('galNone').addEventListener('click', function () { galPicked = {}; galDisarm(); renderGallery(); $('galMsg').textContent = ''; });
+    // a second press within four seconds deletes, as with Clear everything
+    $('galDel').addEventListener('click', function () {
+      var ids = Object.keys(galPicked);
+      if (!ids.length) return;
+      if (!galArmed) {
+        $('galDel').classList.add('armed');
+        $('galDel').textContent = 'Press again to delete ' + n(ids.length) + ' for good';
+        galArmed = setTimeout(galDisarm, 4000);
+        return;
+      }
+      galDisarm();
+      $('galDel').disabled = true;
+      deletePhotos(ids);
     });
 
     $('themeBtn').addEventListener('click', function () {

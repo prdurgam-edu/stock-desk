@@ -394,6 +394,18 @@ shop's own photographs, a kalamkari found the shop's kalamkari, a bandhani the
 shop's bandhanis, and a tissue the shop's tissue. It is a guide, drawn from
 your own sales, not a promise: a saree unlike anything you stock says so.
 
+## Labels and All photos
+
+**Labels** holds the tag photographs that have a design code, in three parts:
+**Manually unmapped**, **Manually mapped** and **System labeled** (newest
+photographs needing a code stay on the Stock desk under *Tag photographs*).
+
+**All photos** shows every photograph kept in the cloud, newest first, with its
+design code and the day it was sent. Tick photographs one by one, or **Select
+all**, then **Delete selected** and press again within four seconds: they are
+removed from the history and deleted from the cloud, with their readings and
+the descriptions *Should I buy?* compares against.
+
 ## Settings you may want to change
 
 In `config.js`:

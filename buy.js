@@ -63,24 +63,28 @@
     if (!asked) { asked = true; fetch(API + '/api/looks/backfill', { method: 'POST' }).catch(function () {}); }
   }
 
-  /* ---------------- the two tabs ---------------- */
+  /* ---------------- the tabs ---------------- */
+  var TABS = { desk: 'Desk', labels: 'Labels', photos: 'Photos', buy: 'Buy' };
+  function tabFromHash() { var h = location.hash.slice(1); return TABS[h] && h !== 'desk' ? h : 'desk'; }
   function show(tab) {
-    var buy = tab === 'buy';
-    $('tabDesk').classList.toggle('hidden', buy);
-    $('tabBuy').classList.toggle('hidden', !buy);
-    $('tabBtnDesk').setAttribute('aria-selected', String(!buy));
-    $('tabBtnBuy').setAttribute('aria-selected', String(buy));
-    if (location.hash !== (buy ? '#buy' : '') && !(location.hash === '' && !buy)) {
-      try { history.replaceState(null, '', buy ? '#buy' : location.pathname + location.search); } catch (e) {}
+    Object.keys(TABS).forEach(function (k) {
+      $('tab' + TABS[k]).classList.toggle('hidden', k !== tab);
+      $('tabBtn' + TABS[k]).setAttribute('aria-selected', String(k === tab));
+    });
+    var want = tab === 'desk' ? '' : '#' + tab;
+    if (location.hash !== want) {
+      try { history.replaceState(null, '', want || location.pathname + location.search); } catch (e) {}
     }
+    // the stock desk draws what a tab shows once it is open
+    try { document.dispatchEvent(new CustomEvent('desk:tab', { detail: tab })); } catch (e) {}
   }
   function boot() {
     lock(true);
     document.querySelectorAll('.tabs [data-tab]').forEach(function (b) {
       b.addEventListener('click', function () { show(b.dataset.tab); window.scrollTo(0, 0); });
     });
-    addEventListener('hashchange', function () { show(location.hash === '#buy' ? 'buy' : 'desk'); });
-    show(location.hash === '#buy' ? 'buy' : 'desk');
+    addEventListener('hashchange', function () { show(tabFromHash()); });
+    show(tabFromHash());
   }
   function lock(on) {
     ['inCam', 'inGal'].forEach(function (id) { $(id).disabled = on; });
