@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15q';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-16a';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -1693,6 +1693,7 @@
       var cb = e.target.closest && e.target.closest('input[data-gal]');
       if (!cb) return;
       if (cb.checked) galPicked[cb.dataset.gal] = true; else delete galPicked[cb.dataset.gal];
+      galByDate = false;
       cb.closest('.gtile').classList.toggle('on', cb.checked);
       galDisarm();
     });
@@ -1702,6 +1703,7 @@
     });
     $('galAll').addEventListener('click', function () {
       var list = galList();
+      galByDate = false;
       list.forEach(function (p) { galPicked[p.id] = true; });
       galDisarm(); renderGallery();
       $('galMsg').textContent = (galQ ? 'All ' + n(list.length) + ' with a code like ' + galQ : 'All ' + n(list.length)) +
@@ -1715,19 +1717,27 @@
       gqT = setTimeout(function () { galQ = v.trim(); galShown = 0; renderGallery(true); }, 200);
     });
     // everything uploaded before a day: picked, ready for Delete selected
-    $('galBefore').addEventListener('input', function () { $('galPickBefore').disabled = !this.value; });
-    $('galPickBefore').addEventListener('click', function () {
+    // the date picks exactly what came before it, in place of anything ticked
+    // before; once picked that way, moving the date moves the selection with it
+    var galByDate = false;
+    $('galBefore').addEventListener('input', function () {
+      $('galPickBefore').disabled = !this.value;
+      if (galByDate && this.value) pickBefore();
+    });
+    $('galPickBefore').addEventListener('click', pickBefore);
+    function pickBefore() {
       var d = $('galBefore').value; if (!d) return;
       var cut = new Date(d + 'T00:00:00').getTime();
       var hits = (state.photos || []).filter(function (p) { return p.sentAt != null && p.sentAt < cut; });
+      galPicked = {}; galByDate = true;
       hits.forEach(function (p) { galPicked[p.id] = true; });
       galDisarm(); renderGallery();
       var dd = d.split('-');
       $('galMsg').textContent = hits.length
         ? n(hits.length) + ' uploaded before ' + dd[2] + '/' + dd[1] + '/' + dd[0].slice(2) + ' selected. Press Delete to remove them.'
         : 'Nothing was uploaded before ' + dd[2] + '/' + dd[1] + '/' + dd[0].slice(2) + '.';
-    });
-    $('galNone').addEventListener('click', function () { galPicked = {}; galDisarm(); renderGallery(); $('galMsg').textContent = ''; });
+    }
+    $('galNone').addEventListener('click', function () { galPicked = {}; galByDate = false; galDisarm(); renderGallery(); $('galMsg').textContent = ''; });
     // a second press within four seconds deletes, as with Clear everything
     $('galDel').addEventListener('click', function () {
       var ids = Object.keys(galPicked);
