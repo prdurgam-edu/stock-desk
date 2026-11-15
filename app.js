@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15f';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15g';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -1021,7 +1021,7 @@
       var left = waitingCount();
       if (changed) {
         Store.backend.save(state).catch(function () {});
-        renderPhotos(); renderLines();
+        renderPhotos(); fillCatFilter(); renderLines();   // categories come with the readings
       }
       if (left) {
         // said beside the photographs, not in the status line: the dashboard
@@ -1608,10 +1608,10 @@
         // what the cloud has already read is matched again here, against
         // today's codes; whatever it has not read yet is sent to it
         fetchReads().then(function () {
-          var redone = applyReads(true);
+          var redone = applyReads(true) + tagCats();
           var unread = (state.photos || []).filter(function (p) { return isPending(p) && !readsCache[p.id]; });
           return (redone ? Store.backend.save(state) : Promise.resolve()).then(function () {
-            renderPhotos(); renderLines();
+            renderPhotos(); fillCatFilter(); renderLines();
             return sendForReading(unread);
           });
         }).then(function (k) {
