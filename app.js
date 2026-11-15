@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-16a';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-16b';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -501,6 +501,7 @@
      go from the history first, then from the cloud with their readings and
      looks, so nothing is left pointing at a picture that is gone. */
   var galPicked = {}, galShown = 0, galArmed = null, GAL_PAGE = 120, galQ = '';
+  var BIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 13h9l1-13"/><path d="M10 11v6M14 11v6"/></svg>';
   // the photographs the search lets through: by design code, spaces and slashes ignored
   function galList() {
     var q = Compute.normKey(galQ);
@@ -524,13 +525,18 @@
     galShown = Math.min(Math.max(galShown, Math.min(GAL_PAGE, list.length)), list.length);
     var picked = Object.keys(galPicked).length;
     var total = (state.photos || []).length;
+    // each photograph's design: its seller and how much of it has sold
+    var byKey = {}; ((A && A.lines) || []).forEach(function (x) { byKey[x.key] = x; });
     $('galHead').innerHTML = 'All photographs <span class="qual">' + (galQ ? n(list.length) + ' of ' : '') + n(total) + '</span>';
     box.innerHTML = list.length ? list.slice(0, galShown).map(function (p) {
       var on = !!galPicked[p.id], l = p.designKey ? (state.refs || {})[p.designKey] || p.designKey : null;
+      var line = p.designKey ? byKey[p.designKey] : null;
       return '<label class="gtile' + (on ? ' on' : '') + '">' +
         '<input type="checkbox" data-gal="' + esc(p.id) + '"' + (on ? ' checked' : '') + ' aria-label="Select ' + esc(p.name) + '">' +
         '<span class="pic"><img data-pid="' + esc(p.id) + '" alt="' + esc(p.name) + '" loading="lazy"></span>' +
         '<span class="gcap"><b>' + (l ? esc(l) : 'no code') + '</b>' +
+          (line ? '<span class="gd gs">' + esc(line.seller || 'seller not mapped') + '</span>' +
+                  '<span class="gd">' + pct(line.pctSold) + ' sales</span>' : '') +
           '<span class="gd">Uploaded ' + (sentDay(p) || MDASH) + '</span></span></label>';
     }).join('') : '<p class="muted">' + (galQ ? 'No photograph carries a code like ' + esc(galQ) + '.' : 'No photographs in the cloud.') + '</p>';
     $('galMoreBox').innerHTML = galShown < list.length
@@ -542,7 +548,7 @@
     var k = Object.keys(galPicked).length;
     $('galNone').disabled = !k;
     $('galDel').disabled = !k;
-    if (!galArmed) $('galDel').textContent = k ? 'Delete ' + n(k) + ' selected' : 'Delete selected';
+    if (!galArmed) $('galDel').innerHTML = BIN + '<span>' + (k ? 'Delete ' + n(k) + ' selected' : 'Delete selected') + '</span>';
   }
   function galDisarm() { clearTimeout(galArmed); galArmed = null; $('galDel').classList.remove('armed'); galBar(); }
   function deletePhotos(ids) {
@@ -1744,7 +1750,7 @@
       if (!ids.length) return;
       if (!galArmed) {
         $('galDel').classList.add('armed');
-        $('galDel').textContent = 'Press again to delete ' + n(ids.length) + ' for good';
+        $('galDel').innerHTML = BIN + '<span>Press again to delete ' + n(ids.length) + ' for good</span>';
         galArmed = setTimeout(galDisarm, 4000);
         return;
       }

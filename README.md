@@ -401,7 +401,7 @@ your own sales, not a promise: a saree unlike anything you stock says so.
 photographs needing a code stay on the Stock desk under *Tag photographs*).
 
 **All photos** shows every photograph kept in the cloud in the order it was uploaded to WhatsApp,
-first one first, with its design code and that date (shown as *Uploaded*). Search a design code to find a design's photographs, or pick a day under
+first one first, with its design code, seller, % sales and that date (shown as *Uploaded*). Search a design code to find a design's photographs, or pick a day under
 **Uploaded before** and press **Select those** to tick everything uploaded before it.
 Tick photographs one by one, or **Select
 all**, then **Delete selected** and press again within four seconds: they are

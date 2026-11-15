@@ -639,3 +639,5 @@ tr.medium .spark path{stroke:var(--medium)} tr.medium .spark .fillp{fill:var(--m
 #galQ{flex:1 1 220px;min-width:0}
 .gal-before{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-2)}
 .gal-before input{font:inherit;padding:7px 9px;border:1px solid var(--rule);border-radius:var(--r-s);background:var(--card);color:var(--ink)}
+#galDel svg{width:16px;height:16px;flex:none}
+.gtile .gcap .gs{color:var(--ink-2)}
