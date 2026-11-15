@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15j';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15k';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -59,12 +59,14 @@
   function hideTip() { tip.classList.remove('on'); }
 
   /* ---------------- charts ---------------- */
-  /* Pieces sold and pieces bought in, a day, on a calendar axis: one point a
-     file, on its own day. A file that covers more than one day (a period
-     export less the one before, a few days apart) shows its days' average. */
-  function lineChart(host, pts) {
+  /* Pieces a day (sold, or bought in), on a calendar axis: one point a file,
+     on its own day. A file that covers more than one day (a period export less
+     the one before, a few days apart) shows its days' average. */
+  function lineChart(host, pts, kind) {
+    var key = kind === 'in' ? 'inn' : 'out', cls = kind === 'in' ? 'inn' : 'sold';
+    var word = kind === 'in' ? 'bought in' : 'sold';
     if (!pts.length) {
-      host.innerHTML = '<p class="muted">Upload a second period export (or a daily file) and the sales between them show here.</p>';
+      host.innerHTML = '<p class="muted">Upload a second period export (or a daily file) and what was ' + word + ' between them shows here.</p>';
       return;
     }
     var DAY = 86400000, t = function (d) { return new Date(d + 'T00:00:00').getTime(); };
@@ -73,10 +75,10 @@
       return { ms: t(p.date), span: span, out: p.out / span, inn: (p.in || 0) / span, p: p };
     });
     var t0 = P[0].ms, t1 = P[P.length - 1].ms;
-    var W = Math.max(320, host.clientWidth || 560), H = 250;
-    var padL = 46, padR = 16, padT = 30, padB = 30;
+    var W = Math.max(320, host.clientWidth || 560), H = 200;
+    var padL = 46, padR = 16, padT = 14, padB = 30;
     var iw = W - padL - padR, ih = H - padT - padB;
-    var max = Math.max.apply(null, P.map(function (q) { return Math.max(q.out, q.inn); })) || 1;
+    var max = Math.max.apply(null, P.map(function (q) { return q[key]; })) || 1;
     var step = Math.pow(10, Math.floor(Math.log10(max))) / 2;
     max = Math.ceil(max / step) * step || 1;
     // one file: in the middle; more: spread by date, with half a day's room either end
@@ -100,10 +102,6 @@
       return '<text class="axis" x="' + x(P[i].ms) + '" y="' + (H - 9) + '" text-anchor="middle">' + day(P[i].ms) + '</text>';
     }).join('');
 
-    var legend = '<g class="legend"><line class="line sold" x1="' + padL + '" x2="' + (padL + 18) + '" y1="10" y2="10"/>' +
-      '<text class="axis" x="' + (padL + 24) + '" y="13.5">Sold</text>' +
-      '<line class="line inn" x1="' + (padL + 70) + '" x2="' + (padL + 88) + '" y1="10" y2="10"/>' +
-      '<text class="axis" x="' + (padL + 94) + '" y="13.5">Bought in</text></g>';
 
     var hits = P.map(function (q, i) {
       var w = P.length === 1 ? iw : Math.max(10, iw / P.length);
@@ -111,16 +109,15 @@
     }).join('');
 
     host.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
-      'aria-label="Pieces sold and bought in a day, from ' + day(t0) + ' to ' + day(t1) + '">' +
-      legend + ticks + '<path class="line inn" d="' + path('inn') + '"/><path class="line sold" d="' + path('out') + '"/>' +
-      dots('inn', 'inn') + dots('out', 'sold') + xlab + hits + '</svg>';
+      'aria-label="Pieces ' + word + ' a day, from ' + day(t0) + ' to ' + day(t1) + '">' +
+      ticks + '<path class="line ' + cls + '" d="' + path(key) + '"/>' + dots(key, cls) + xlab + hits + '</svg>';
 
     host.querySelectorAll('.hit').forEach(function (el) {
       el.addEventListener('mouseenter', function () {
         var q = P[+el.dataset.i], r = el.getBoundingClientRect();
         var when = q.span === 1 ? '<b>' + day(q.ms) + '</b>'
           : '<b>' + day(q.ms - (q.span - 1) * DAY) + ' to ' + day(q.ms) + '</b> (' + q.span + ' days, a day each)';
-        showTip(when + '<br>' + n(Math.round(q.out)) + ' sold' + '<br>' + n(Math.round(q.inn)) + ' bought in',
+        showTip(when + '<br>' + n(Math.round(q[key])) + ' ' + word,
           r.left + r.width / 2, r.top + 40);
       });
       el.addEventListener('mouseleave', hideTip);
@@ -177,7 +174,8 @@
     }).join('');
 
     $('trendQual').textContent = A.coverFrom ? daysSpan() : '';
-    lineChart($('trendChart'), A.trend);
+    lineChart($('trendChart'), A.trend, 'out');
+    lineChart($('inChart'), A.trend, 'in');
 
     $('tiles').innerHTML = MOVES.map(function (k) {
       return '<button class="tile ' + k + '" type="button" data-s="' + k + '" aria-pressed="' +
@@ -1765,7 +1763,7 @@
     var rt;
     addEventListener('resize', function () {
       clearTimeout(rt);
-      rt = setTimeout(function () { if (A) lineChart($('trendChart'), A.trend); }, 180);
+      rt = setTimeout(function () { if (A) { lineChart($('trendChart'), A.trend, 'out'); lineChart($('inChart'), A.trend, 'in'); } }, 180);
     });
 
     Store.backend.load().then(function (s) {
