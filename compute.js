@@ -270,7 +270,7 @@
       }
       for (var j = 0; j < spark.length; j++) {
         var mm = state.days[spark[j]].mv[k];
-        series.push(mm ? mm[1] : 0);
+        series.push(mm ? mm[1] / spanOf(spark[j]) : 0);   // a day's worth, whatever the file covers
       }
       var bal = (state.latest && state.latest.bal[k]) || 0;
       var c = cum && cum.rows[k];
@@ -349,7 +349,8 @@
     lines.forEach(function (l) { tot[l.status]++; pcs[l.status] += l.bal; });
 
     var trend = dates.map(function (d) {
-      return { date: d, out: state.days[d].tot[1], in: state.days[d].tot[0] };
+      // span: the days this movement covers (a period export less the one before)
+      return { date: d, out: state.days[d].tot[1], in: state.days[d].tot[0], span: spanOf(d) };
     });
 
     return {
