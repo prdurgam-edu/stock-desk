@@ -636,3 +636,6 @@ tr.medium .spark path{stroke:var(--medium)} tr.medium .spark .fillp{fill:var(--m
 #galMoreBox{margin:14px 0}
 @media (max-width:700px){ .gal{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px} .gtile .gcap{font-size:10.5px;padding:4px 6px} }
 .gtile .gcap b,.gtile .gcap .gd{display:block;overflow:hidden;text-overflow:ellipsis}
+#galQ{flex:1 1 220px;min-width:0}
+.gal-before{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-2)}
+.gal-before input{font:inherit;padding:7px 9px;border:1px solid var(--rule);border-radius:var(--r-s);background:var(--card);color:var(--ink)}

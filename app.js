@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15p';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15q';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -500,8 +500,18 @@
      In the order they were sent, first one first, a page at a time. Ticked ones can be deleted together: they
      go from the history first, then from the cloud with their readings and
      looks, so nothing is left pointing at a picture that is gone. */
-  var galPicked = {}, galShown = 0, galArmed = null, GAL_PAGE = 120;
+  var galPicked = {}, galShown = 0, galArmed = null, GAL_PAGE = 120, galQ = '';
+  // the photographs the search lets through: by design code, spaces and slashes ignored
   function galList() {
+    var q = Compute.normKey(galQ);
+    var all = galAllSorted();
+    if (!q) return all;
+    return all.filter(function (p) {
+      var code = p.designKey ? Compute.normKey((state.refs || {})[p.designKey] || p.designKey) : 'NOCODE';
+      return code.indexOf(q) >= 0;
+    });
+  }
+  function galAllSorted() {
     // the order they were sent on WhatsApp, first one first
     return (state.photos || []).slice().sort(function (a, b) {
       return (a.sentAt || 0) - (b.sentAt || 0) || (a.seq || 0) - (b.seq || 0) || (a.name < b.name ? -1 : 1);
@@ -513,7 +523,8 @@
     if (reset || !galShown) galShown = Math.min(GAL_PAGE, list.length);
     galShown = Math.min(Math.max(galShown, Math.min(GAL_PAGE, list.length)), list.length);
     var picked = Object.keys(galPicked).length;
-    $('galHead').innerHTML = 'All photographs <span class="qual">' + n(list.length) + '</span>';
+    var total = (state.photos || []).length;
+    $('galHead').innerHTML = 'All photographs <span class="qual">' + (galQ ? n(list.length) + ' of ' : '') + n(total) + '</span>';
     box.innerHTML = list.length ? list.slice(0, galShown).map(function (p) {
       var on = !!galPicked[p.id], l = p.designKey ? (state.refs || {})[p.designKey] || p.designKey : null;
       return '<label class="gtile' + (on ? ' on' : '') + '">' +
@@ -521,7 +532,7 @@
         '<span class="pic"><img data-pid="' + esc(p.id) + '" alt="' + esc(p.name) + '" loading="lazy"></span>' +
         '<span class="gcap"><b>' + (l ? esc(l) : 'no code') + '</b>' +
           '<span class="gd">Uploaded ' + (sentDay(p) || MDASH) + '</span></span></label>';
-    }).join('') : '<p class="muted">No photographs in the cloud.</p>';
+    }).join('') : '<p class="muted">' + (galQ ? 'No photograph carries a code like ' + esc(galQ) + '.' : 'No photographs in the cloud.') + '</p>';
     $('galMoreBox').innerHTML = galShown < list.length
       ? '<button type="button" class="iconbtn" id="galMore">Show more <span class="count">' + n(list.length - galShown) + '</span></button>' : '';
     hydrate(box);
@@ -1690,9 +1701,31 @@
       galShown += GAL_PAGE; renderGallery();
     });
     $('galAll').addEventListener('click', function () {
-      galList().forEach(function (p) { galPicked[p.id] = true; });
+      var list = galList();
+      list.forEach(function (p) { galPicked[p.id] = true; });
       galDisarm(); renderGallery();
-      $('galMsg').textContent = 'All ' + n(Object.keys(galPicked).length) + ' selected, including those not shown yet.';
+      $('galMsg').textContent = (galQ ? 'All ' + n(list.length) + ' with a code like ' + galQ : 'All ' + n(list.length)) +
+        ' selected, including those not shown yet.';
+    });
+    // search by design code
+    var gqT;
+    $('galQ').addEventListener('input', function () {
+      var v = this.value;
+      clearTimeout(gqT);
+      gqT = setTimeout(function () { galQ = v.trim(); galShown = 0; renderGallery(true); }, 200);
+    });
+    // everything uploaded before a day: picked, ready for Delete selected
+    $('galBefore').addEventListener('input', function () { $('galPickBefore').disabled = !this.value; });
+    $('galPickBefore').addEventListener('click', function () {
+      var d = $('galBefore').value; if (!d) return;
+      var cut = new Date(d + 'T00:00:00').getTime();
+      var hits = (state.photos || []).filter(function (p) { return p.sentAt != null && p.sentAt < cut; });
+      hits.forEach(function (p) { galPicked[p.id] = true; });
+      galDisarm(); renderGallery();
+      var dd = d.split('-');
+      $('galMsg').textContent = hits.length
+        ? n(hits.length) + ' uploaded before ' + dd[2] + '/' + dd[1] + '/' + dd[0].slice(2) + ' selected. Press Delete to remove them.'
+        : 'Nothing was uploaded before ' + dd[2] + '/' + dd[1] + '/' + dd[0].slice(2) + '.';
     });
     $('galNone').addEventListener('click', function () { galPicked = {}; galDisarm(); renderGallery(); $('galMsg').textContent = ''; });
     // a second press within four seconds deletes, as with Clear everything

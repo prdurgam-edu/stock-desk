@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Libre+Franklin:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css?v=20261115l">
+<link rel="stylesheet" href="styles.css?v=20261115q">
 
 <!-- the settings: config.js, shared by every page -->
 <script src="config.js?v=20261114c"></script>
@@ -180,7 +180,13 @@
   <div id="tabPhotos" role="tabpanel" aria-labelledby="tabBtnPhotos" class="hidden">
     <h2 id="galHead">All photographs</h2>
     <p class="muted" style="margin:-6px 0 14px">Every photograph kept in the cloud, in the order they were uploaded to WhatsApp, first one first. Tick the ones to
-      delete, or select them all; deleting removes them from the cloud for good, with their readings and labels.</p>
+      delete, search a design code, pick all uploaded before a date, or select them all; deleting removes them from the cloud for good, with their readings and labels.</p>
+    <div class="controls gal-bar">
+      <input type="search" id="galQ" placeholder="Search a design code" aria-label="Search photographs by design code">
+      <label class="gal-before">Uploaded before
+        <input type="date" id="galBefore" aria-label="Uploaded before this date"></label>
+      <button class="iconbtn" id="galPickBefore" type="button" disabled>Select those</button>
+    </div>
     <div class="controls gal-bar">
       <button class="iconbtn" id="galAll" type="button">Select all</button>
       <button class="iconbtn" id="galNone" type="button" disabled>Clear selection</button>
@@ -273,7 +279,7 @@
 <script src="compute.js?v=20261115h"></script>
 <script src="pieces.js?v=20261114c"></script>
 <script src="matcher.js?v=20261114c"></script>
-<script src="app.js?v=20261115p"></script>
+<script src="app.js?v=20261115q"></script>
 <script src="buy.js?v=20261115l"></script>
 </body>
 </html>
