@@ -615,6 +615,6 @@ tr.medium .spark path{stroke:var(--medium)} tr.medium .spark .fillp{fill:var(--m
 .catsel{display:block;margin-top:5px;font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--rule);border-radius:6px;background:var(--card);color:var(--ink-2);max-width:100%}
 .catsel.mine{border-color:var(--accent);color:var(--ink)}
 .ptile .catsel{margin:4px 0}
-.chart .col{fill:var(--accent);opacity:.85}
-.chart .startday{fill:none;stroke:var(--rule-2);stroke-width:1;stroke-dasharray:3 3}
-.chart .startlab{font-size:10px}
+/* the two lines: sold, and bought in */
+.chart .line.inn{stroke:var(--slow)} .chart .pt.inn{fill:var(--slow)}
+.chart .line.sold{stroke:var(--accent)} .chart .pt.sold{fill:var(--accent)}

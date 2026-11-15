@@ -447,8 +447,9 @@ the table says how many of the 15 days have one.
 every day instead of daily files, each one less the one before gives what came
 in and what sold between them, line by line, and that is used exactly like a
 daily file: for sell-through, the movement groups, the trend chart and the
-last-14-days sparklines (the chart shows pieces sold a day on a calendar, each
-export's sales spread over the days since the one before). The day each export was taken comes from its file name
+last-14-days sparklines (the chart has two lines, pieces sold and pieces bought
+in a day, one point a file; an export a few days after the last shows those
+days' average). The day each export was taken comes from its file name
 (`ASR GS & S 14-11-26.xlsx`, `… 14.11.26.xlsx`). Exports can be uploaded in any
 order; one older than another already in makes the page read them all again in
 date order. A name carrying a date still to come (`13.12.26` for `13.11.26`) is

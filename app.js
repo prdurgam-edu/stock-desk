@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-15i';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-15j';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -59,33 +59,28 @@
   function hideTip() { tip.classList.remove('on'); }
 
   /* ---------------- charts ---------------- */
-  /* Pieces sold per day, on a calendar axis. Each bar is one file's movement
-     spread over the days it covers: one day for a daily file, the days since
-     the last export for a period export, so two days' sales never pass for
-     one day's, and gaps between files show as gaps. */
-  function lineChart(host, pts, base) {
+  /* Pieces sold and pieces bought in, a day, on a calendar axis: one point a
+     file, on its own day. A file that covers more than one day (a period
+     export less the one before, a few days apart) shows its days' average. */
+  function lineChart(host, pts) {
     if (!pts.length) {
       host.innerHTML = '<p class="muted">Upload a second period export (or a daily file) and the sales between them show here.</p>';
       return;
     }
     var DAY = 86400000, t = function (d) { return new Date(d + 'T00:00:00').getTime(); };
-    var bars = pts.map(function (p) {
+    var P = pts.map(function (p) {
       var span = Math.max(1, p.span || 1);
-      // whole days: from the first day it covers to the end of its own day
-      return { end: t(p.date) + DAY, start: t(p.date) - (span - 1) * DAY, span: span, perDay: p.out / span, inDay: (p.in || 0) / span, p: p };
+      return { ms: t(p.date), span: span, out: p.out / span, inn: (p.in || 0) / span, p: p };
     });
-    // the first file is where the counting starts: its own day is on the axis
-    // too, marked, though what sold that day needs the file before it
-    var baseMs = base ? t(base) : null;
-    var t0 = Math.min.apply(null, bars.map(function (b) { return b.start; }).concat(baseMs != null ? [baseMs] : []));
-    var t1 = Math.max.apply(null, bars.map(function (b) { return b.end; }));
-    var W = Math.max(320, host.clientWidth || 560), H = 230;
-    var padL = 46, padR = 12, padT = 14, padB = 30;
+    var t0 = P[0].ms, t1 = P[P.length - 1].ms;
+    var W = Math.max(320, host.clientWidth || 560), H = 250;
+    var padL = 46, padR = 16, padT = 30, padB = 30;
     var iw = W - padL - padR, ih = H - padT - padB;
-    var max = Math.max.apply(null, bars.map(function (b) { return b.perDay; })) || 1;
+    var max = Math.max.apply(null, P.map(function (q) { return Math.max(q.out, q.inn); })) || 1;
     var step = Math.pow(10, Math.floor(Math.log10(max))) / 2;
     max = Math.ceil(max / step) * step || 1;
-    var x = function (ms) { return padL + (ms - t0) / Math.max(DAY, t1 - t0) * iw; };
+    // one file: in the middle; more: spread by date, with half a day's room either end
+    var x = function (ms) { return t1 === t0 ? padL + iw / 2 : padL + (ms - t0 + DAY / 2) / (t1 - t0 + DAY) * iw; };
     var y = function (v) { return padT + ih - (v / max) * ih; };
     var day = function (ms) { var d = new Date(ms); return fmtDate(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')); };
 
@@ -93,53 +88,45 @@
       return '<line class="grid" x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>' +
              '<text class="axis" x="' + (padL - 7) + '" y="' + (y(v) + 3.5) + '" text-anchor="end">' + n(Math.round(v)) + '</text>';
     }).join('');
+    var path = function (k) { return P.map(function (q, i) { return (i ? 'L' : 'M') + x(q.ms).toFixed(1) + ' ' + y(q[k]).toFixed(1); }).join(' '); };
+    var dots = function (k, cls) {
+      return P.map(function (q) { return '<circle class="pt ' + cls + '" cx="' + x(q.ms).toFixed(1) + '" cy="' + y(q[k]).toFixed(1) + '" r="' + (P.length > 40 ? 2 : 3.6) + '"/>'; }).join('');
+    };
 
-    var gap = Math.min(2, iw / Math.max(1, (t1 - t0) / DAY) * 0.15);
-    var rects = bars.map(function (b, i) {
-      var x0 = x(b.start) + gap / 2, x1 = x(b.end) - gap / 2;
-      return '<rect class="col" x="' + x0.toFixed(1) + '" y="' + y(b.perDay).toFixed(1) + '" width="' + Math.max(1, x1 - x0).toFixed(1) +
-        '" height="' + Math.max(0, padT + ih - y(b.perDay)).toFixed(1) + '"/>' +
-        '<rect class="hit" x="' + x0.toFixed(1) + '" y="' + padT + '" width="' + Math.max(6, x1 - x0).toFixed(1) + '" height="' + ih + '" data-i="' + i + '"/>';
+    // every file's day along the bottom while they fit; past eight, six evenly
+    var idx = P.length <= 8 ? P.map(function (_, i) { return i; })
+      : [0, 1, 2, 3, 4, 5].map(function (k) { return Math.round((P.length - 1) * k / 5); });
+    var xlab = idx.filter(function (v, i) { return idx.indexOf(v) === i; }).map(function (i) {
+      return '<text class="axis" x="' + x(P[i].ms) + '" y="' + (H - 9) + '" text-anchor="middle">' + day(P[i].ms) + '</text>';
     }).join('');
 
-    // every file's day along the bottom while they fit; past ten, six evenly
-    var ndays = Math.round((t1 - t0) / DAY), xlab = '', shown = {};
-    var marks = ndays <= 10 ? Array.apply(null, Array(ndays)).map(function (_, i) { return i; })
-      : [0, 1, 2, 3, 4, 5].map(function (k) { return Math.round((ndays - 1) * k / 5); });
-    marks.forEach(function (di) {
-      if (shown[di]) return; shown[di] = 1;
-      var ms = t0 + di * DAY;
-      xlab += '<text class="axis" x="' + x(ms + DAY / 2) + '" y="' + (H - 9) + '" text-anchor="middle">' + day(ms) + '</text>';
-    });
-    if (baseMs != null) {
-      var bx0 = x(baseMs) + gap / 2, bx1 = x(baseMs + DAY) - gap / 2;
-      rects = '<rect class="startday" x="' + bx0.toFixed(1) + '" y="' + padT + '" width="' + Math.max(1, bx1 - bx0).toFixed(1) + '" height="' + ih + '"/>' +
-        (bx1 - bx0 > 56 ? '<text class="axis startlab" x="' + ((bx0 + bx1) / 2).toFixed(1) + '" y="' + (padT + ih / 2) + '" text-anchor="middle">first file</text>' : '') +
-        '<rect class="hit" x="' + bx0.toFixed(1) + '" y="' + padT + '" width="' + Math.max(6, bx1 - bx0).toFixed(1) + '" height="' + ih + '" data-i="base"/>' + rects;
-    }
+    var legend = '<g class="legend"><line class="line sold" x1="' + padL + '" x2="' + (padL + 18) + '" y1="10" y2="10"/>' +
+      '<text class="axis" x="' + (padL + 24) + '" y="13.5">Sold</text>' +
+      '<line class="line inn" x1="' + (padL + 70) + '" x2="' + (padL + 88) + '" y1="10" y2="10"/>' +
+      '<text class="axis" x="' + (padL + 94) + '" y="13.5">Bought in</text></g>';
+
+    var hits = P.map(function (q, i) {
+      var w = P.length === 1 ? iw : Math.max(10, iw / P.length);
+      return '<rect class="hit" x="' + (x(q.ms) - w / 2) + '" y="' + padT + '" width="' + w + '" height="' + ih + '" data-i="' + i + '"/>';
+    }).join('');
 
     host.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
-      'aria-label="Pieces sold per day from ' + day(t0) + ' to ' + day(t1) + '">' +
-      ticks + rects + xlab + '</svg>';
+      'aria-label="Pieces sold and bought in a day, from ' + day(t0) + ' to ' + day(t1) + '">' +
+      legend + ticks + '<path class="line inn" d="' + path('inn') + '"/><path class="line sold" d="' + path('out') + '"/>' +
+      dots('inn', 'inn') + dots('out', 'sold') + xlab + hits + '</svg>';
 
     host.querySelectorAll('.hit').forEach(function (el) {
       el.addEventListener('mouseenter', function () {
-        var r = el.getBoundingClientRect();
-        if (el.dataset.i === 'base') {
-          showTip('<b>' + fmtDate(base) + '</b><br>The first file on record: the count starts here.<br>' +
-            'What sold on this day needs the file from the day before.', r.left + r.width / 2, r.top + 40);
-          return;
-        }
-        var b = bars[+el.dataset.i];
-        showTip(b.span === 1
-          ? '<b>' + fmtDate(b.p.date) + '</b><br>' + n(b.p.out) + ' pieces sold' + (b.p.in ? '<br>' + n(b.p.in) + ' came in' : '')
-          : '<b>' + day(b.start) + ' to ' + fmtDate(b.p.date) + '</b> (' + b.span + ' days)<br>' + n(b.p.out) + ' pieces sold, about ' +
-            n(Math.round(b.perDay)) + ' a day' + (b.p.in ? '<br>' + n(b.p.in) + ' came in' : ''),
+        var q = P[+el.dataset.i], r = el.getBoundingClientRect();
+        var when = q.span === 1 ? '<b>' + day(q.ms) + '</b>'
+          : '<b>' + day(q.ms - (q.span - 1) * DAY) + ' to ' + day(q.ms) + '</b> (' + q.span + ' days, a day each)';
+        showTip(when + '<br>' + n(Math.round(q.out)) + ' sold' + '<br>' + n(Math.round(q.inn)) + ' bought in',
           r.left + r.width / 2, r.top + 40);
       });
       el.addEventListener('mouseleave', hideTip);
     });
   }
+
 
 
   function sparkline(series) {
@@ -189,9 +176,8 @@
         '<div class="v num">' + h[1] + '</div><div class="n">' + esc(h[2]) + '</div></div>';
     }).join('');
 
-    // the chart runs from the first file's day, so the heading does too
-    $('trendQual').textContent = A.coverFrom ? fmtDate(A.coverFrom) + ' to ' + fmtDate(A.asOf) : '';
-    lineChart($('trendChart'), A.trend, A.coverFrom);
+    $('trendQual').textContent = A.coverFrom ? daysSpan() : '';
+    lineChart($('trendChart'), A.trend);
 
     $('tiles').innerHTML = MOVES.map(function (k) {
       return '<button class="tile ' + k + '" type="button" data-s="' + k + '" aria-pressed="' +
@@ -1779,7 +1765,7 @@
     var rt;
     addEventListener('resize', function () {
       clearTimeout(rt);
-      rt = setTimeout(function () { if (A) lineChart($('trendChart'), A.trend, A.coverFrom); }, 180);
+      rt = setTimeout(function () { if (A) lineChart($('trendChart'), A.trend); }, 180);
     });
 
     Store.backend.load().then(function (s) {
