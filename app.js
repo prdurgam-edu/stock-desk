@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-16b';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-16c';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -1954,6 +1954,15 @@
         }).catch(function () {});
       }
       checkCopies();
+      /* Seller names: last year's sheet used to overwrite this year's for
+         designs in both. Read everything again once, in date order, so each
+         design shows the seller from the newest export. */
+      if (!state.sellersFixed && state.files.some(function (f) { return f.kind === 'master'; })) {
+        rebuildWithout(null).then(function (fresh) {
+          fresh.sellersFixed = 1; state = fresh;
+          return persistAndDraw().then(function () { status('Seller names refreshed from the newest export.', 'ok'); });
+        }).catch(function () {});
+      }
       // clear out of the cloud anything the history no longer mentions
       if (Store.backend.tidy && state.version) Store.backend.tidy().catch(function () {});
       status(state.files.length

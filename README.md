@@ -457,6 +457,15 @@ from today's stock plus what sold, less what came in, in the daily files of
 those days. Days without a daily file count as no movement, and the note above
 the table says how many of the 15 days have one.
 
+**Which sheets are read.** Every sheet with a *C. REF* and *TotOut* heading and a
+"From … To …" line. In the period export that is **ASR GS** (this financial year,
+design by design: stock on hand, in, out and seller), which everything on the
+page is built from, and **ASR GS(31.03.26)** (last financial year), which only
+fills in seller names and design names for designs this year's sheet lacks; it
+never replaces this year's seller and never counts as stock or sales. **ASR S**
+(the same year totalled by supplier, with no design codes) is not read: the
+Sellers table adds the designs up instead.
+
 **Period exports sent day to day.** When the shop sends a full-period export
 every day instead of daily files, each one less the one before gives what came
 in and what sold between them, line by line, and that is used exactly like a

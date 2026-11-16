@@ -160,18 +160,21 @@
         state.latest = { date: sheet.from, bal: bal };
       }
     } else {
+      asOf = masterAsOf(sheet, fileMeta);
+      var prev = state.cumulative;
+      var newer = !prev || asOf > prev.asOf ||
+                  (asOf === prev.asOf && sheet.to > prev.to);
       var rows = {};
       for (i = 0; i < sheet.rows.length; i++) {
         o = sheet.rows[i];
         var cur = rows[o.key] || (rows[o.key] = { tin: 0, tout: 0, bal: 0 });
         cur.tin += o.tin; cur.tout += o.tout; cur.bal += o.bal;
         if (!state.refs[o.key]) state.refs[o.key] = o.ref;
-        if (o.seller) state.sellers[o.key] = o.seller;   // the seller map lives here
+        // the seller map lives here. An older export (last year's sheet, which
+        // every period export carries) only fills gaps: it never replaces the
+        // seller the newest export gives
+        if (o.seller && (newer || !state.sellers[o.key])) state.sellers[o.key] = o.seller;
       }
-      asOf = masterAsOf(sheet, fileMeta);
-      var prev = state.cumulative;
-      var newer = !prev || asOf > prev.asOf ||
-                  (asOf === prev.asOf && sheet.to > prev.to);
       var samePeriod = prev && prev.from === sheet.from && prev.to === sheet.to;
       /* Period exports sent day after day: what moved between the last one and
          this one is this one's totals less the last one's, line by line. It is

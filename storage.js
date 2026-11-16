@@ -17,6 +17,7 @@
   var CFG = global.NARSINGH_CONFIG || {};
   var EMPTY = {
     version: 1,
+    sellersFixed: 1,    // seller names come from the newest export (see app.js)
     files: [],          // one row per uploaded workbook
     days: {},           // date -> { mv: {designKey:[in,out]}, tot:[in,out], lines:n }
     latest: null,       // { date, bal: {designKey: pieces} }  newest balance snapshot
