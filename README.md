@@ -402,6 +402,12 @@ that code, with the design's other photographs to flick through, its seller,
 stock and % sales. **Match** links it; **Not a match** takes that suggestion away
 for good, so it is not offered for that photograph again.
 
+A tag photograph with no code yet (*No match*, *Ambiguous*, …) opens when its
+picture is tapped: the photograph large, what the reader made of the tag, and a
+box to type the code. As soon as the box holds a code from the workbook, that
+design's photographs, seller, stock and % sales show beside it; **Link** (or
+Enter) gives the photograph that code.
+
 ## Labels and All photos
 
 **Labels** holds the tag photographs that have a design code, in three parts:

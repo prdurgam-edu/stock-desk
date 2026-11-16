@@ -656,3 +656,9 @@ dialog.cmp{max-width:min(980px,96vw)}
 .cmp-foot{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
 .cmp-foot .cmp-no{border-color:var(--dead);color:var(--dead)}
 @media (max-width:700px){ .cmp-body{grid-template-columns:1fr;padding:12px} .cmp-body .pic img{max-height:38vh} .cmp-foot button{flex:1 1 100%;justify-content:center} }
+.cmp-type{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--ink-2);margin-bottom:10px;font-family:var(--mono)}
+.cmp-type input{font:inherit;font-size:16px;padding:10px 12px;border:1px solid var(--rule-2);border-radius:var(--r-s);background:var(--card);color:var(--ink)}
+.cmp-type input.bad{border-color:var(--dead)}
+.cmp-read{font-size:12.5px;margin:8px 0 0}
+.cmp-who{font-family:var(--mono);font-size:13px;color:var(--ink-2);margin:0 0 8px}
+.ph img[data-pick]{cursor:pointer}

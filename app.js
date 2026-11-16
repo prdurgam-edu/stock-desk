@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-16d';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-16e';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -674,7 +674,9 @@
           '<button class="link" data-link="' + esc(p.id) + '" type="button" disabled>Link</button></div>';
     }
     return '<figure class="ph" style="margin:0">' +
-      '<img data-pid="' + esc(p.id) + '" data-big="1" alt="' + esc(p.name) + '">' +
+      // a photograph still waiting for a code opens to type one; the rest open large
+      '<img data-pid="' + esc(p.id) + '" ' + (mode === 'pending' || (!mode && isPending(p)) ? 'data-pick="' + esc(p.id) + '"' : 'data-big="1"') +
+        ' alt="' + esc(p.name) + '">' +
       '<figcaption class="cap"><span class="st ' + st + '">' + esc(badge) + '</span>' +
       (sentDay(p) ? '<div class="sent">Uploaded ' + sentDay(p) + (p.sender ? ' by ' + esc(p.sender) : '') + '</div>' : '') +
       body + '</figcaption></figure>';
@@ -958,6 +960,82 @@
     };
     hydrate(cmpDlg);
     cmpDlg.showModal();
+  }
+
+  /* A photograph with no code yet, opened: the picture large, what the reader
+     made of its tag, and a box to type the code. As soon as the box holds a
+     code from the workbook, that design's photographs, seller and stock show
+     beside it, to check before linking. */
+  var typeDlg = null;
+  function typeCode(id) {
+    var p = photoById(id); if (!p) return;
+    if (!typeDlg) {
+      typeDlg = document.createElement('dialog');
+      typeDlg.className = 'cmp';
+      document.body.appendChild(typeDlg);
+      typeDlg.addEventListener('click', function (e) {
+        if (e.target === typeDlg) typeDlg.close();
+        var th = e.target.closest && e.target.closest('[data-cmp-pic]');
+        if (th) {
+          var big = typeDlg.querySelector('.cmp-them > .pic img');
+          big.removeAttribute('data-h'); big.dataset.pid = th.dataset.cmpPic; big.removeAttribute('src');
+          typeDlg.querySelectorAll('[data-cmp-pic]').forEach(function (x) { x.classList.toggle('on', x === th); });
+          hydrate(typeDlg);
+        }
+      });
+    }
+    var read = (p.ocr && p.ocr.message) || p.message || '';
+    typeDlg.innerHTML =
+      '<div class="dlg-head"><h2>Which design is this?</h2>' +
+        '<button class="x" type="button" data-cmp="close" aria-label="Close">&times;</button></div>' +
+      '<div class="cmp-body">' +
+        '<figure class="cmp-me"><figcaption>This photograph' + (sentDay(p) ? ' &middot; uploaded ' + sentDay(p) : '') + '</figcaption>' +
+          '<span class="pic"><img data-pid="' + esc(p.id) + '" alt="This photograph"></span>' +
+          (read ? '<p class="muted cmp-read">' + esc(read) + '</p>' : '') + '</figure>' +
+        '<figure class="cmp-them">' +
+          '<label class="cmp-type">Design code <input type="text" list="designList" autocomplete="off" spellcheck="false" ' +
+            'placeholder="Type the code on the tag" id="typeCodeIn"></label>' +
+          '<div id="typeCodeShow"><p class="muted cmp-none">Type the code and its photographs show here, to check against this one.</p></div>' +
+        '</figure>' +
+      '</div>' +
+      '<div class="dlg-foot cmp-foot">' +
+        '<button type="button" class="iconbtn" data-cmp="close2">Cancel</button>' +
+        '<button type="button" class="btn-primary cmp-yes" data-cmp="yes" disabled>&#10003; Link</button>' +
+      '</div>';
+    var inp = typeDlg.querySelector('#typeCodeIn'), yes = typeDlg.querySelector('[data-cmp="yes"]'), show = typeDlg.querySelector('#typeCodeShow');
+    var shownKey = null;
+    function look() {
+      var key = Compute.normKey(inp.value), ok = !!validCodes[key];
+      inp.classList.toggle('bad', inp.value.length > 2 && !ok);
+      yes.disabled = !ok;
+      if (!ok) {
+        show.innerHTML = '<p class="muted cmp-none">' + (inp.value.length > 2 ? 'No design ' + esc(inp.value) + ' in the workbook.' : 'Type the code and its photographs show here, to check against this one.') + '</p>';
+        shownKey = null; yes.innerHTML = '&#10003; Link'; return;
+      }
+      if (key === shownKey) return;
+      shownKey = key;
+      var ref = (state.refs || {})[key] || inp.value, l = A && A.lines.filter(function (x) { return x.key === key; })[0];
+      var pics = (picsByDesign[key] || []).filter(function (x) { return x !== p.id; }).slice(0, 8);
+      yes.innerHTML = '&#10003; Link to ' + esc(ref);
+      show.innerHTML = '<p class="cmp-who">' + esc(ref) + (l ? ' &middot; ' + esc(l.seller || 'seller not mapped') + ' &middot; ' + n(l.bal) + ' on hand &middot; ' + pct(l.pctSold) + ' sales' : '') + '</p>' +
+        (pics.length ? '<span class="pic"><img data-pid="' + esc(pics[0]) + '" alt="' + esc(ref) + '"></span>' +
+          (pics.length > 1 ? '<div class="cmp-strip">' + pics.map(function (x, i) {
+            return '<button type="button" class="' + (i === 0 ? 'on' : '') + '" data-cmp-pic="' + esc(x) + '"><span class="pic"><img data-pid="' + esc(x) + '" alt=""></span></button>';
+          }).join('') + '</div>' : '')
+          : '<p class="muted cmp-none">No photograph of ' + esc(ref) + ' yet. Link it if the tag says so.</p>');
+      hydrate(show);
+    }
+    inp.addEventListener('input', look);
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !yes.disabled) yes.click(); });
+    typeDlg.querySelector('[data-cmp="close"]').onclick = typeDlg.querySelector('[data-cmp="close2"]').onclick = function () { typeDlg.close(); };
+    yes.onclick = function () {
+      var code = inp.value, ref = (state.refs || {})[Compute.normKey(code)] || code;
+      typeDlg.close(); assign(id, code);
+      status(p.name + ' linked to ' + ref + '.', 'ok');
+    };
+    hydrate(typeDlg);
+    typeDlg.showModal();
+    setTimeout(function () { inp.focus(); }, 50);
   }
 
   function assign(id, code) {
@@ -1919,6 +1997,8 @@
         if (di) { e.preventDefault(); retryImg(di); }
         return;
       }
+      var pick = e.target.closest && e.target.closest('img[data-pick]');
+      if (pick && pick.src && !pick.classList.contains('imgwait')) { typeCode(pick.dataset.pick); return; }
       var img = e.target.closest && e.target.closest('img[data-big]');
       if (!img || !img.src || img.classList.contains('imgwait')) return;
       var key = img.dataset.design, set = key && picsByDesign[key];
