@@ -641,3 +641,18 @@ tr.medium .spark path{stroke:var(--medium)} tr.medium .spark .fillp{fill:var(--m
 .gal-before input{font:inherit;padding:7px 9px;border:1px solid var(--rule);border-radius:var(--r-s);background:var(--card);color:var(--ink)}
 #galDel svg{width:16px;height:16px;flex:none}
 .gtile .gcap .gs{color:var(--ink-2)}
+/* match or not: a suggested code beside the photograph */
+dialog.cmp{max-width:min(980px,96vw)}
+.cmp-body{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:14px 18px;max-height:calc(100vh - 190px);overflow:auto}
+.cmp-body figure{margin:0;min-width:0}
+.cmp-body figcaption{font-size:13px;color:var(--ink-2);margin-bottom:8px;font-family:var(--mono)}
+.cmp-body .pic{display:block;background:var(--sunk);border-radius:var(--r-s);overflow:hidden}
+.cmp-body .pic img{display:block;width:100%;max-height:calc(100vh - 300px);object-fit:contain}
+.cmp-none{padding:40px 10px;text-align:center}
+.cmp-strip{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.cmp-strip button{padding:0;border:2px solid transparent;border-radius:6px;background:none;cursor:pointer;width:54px;height:54px;overflow:hidden}
+.cmp-strip button.on{border-color:var(--accent)}
+.cmp-strip .pic,.cmp-strip img{width:100%;height:100%;object-fit:cover;display:block;max-height:none}
+.cmp-foot{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.cmp-foot .cmp-no{border-color:var(--dead);color:var(--dead)}
+@media (max-width:700px){ .cmp-body{grid-template-columns:1fr;padding:12px} .cmp-body .pic img{max-height:38vh} .cmp-foot button{flex:1 1 100%;justify-content:center} }

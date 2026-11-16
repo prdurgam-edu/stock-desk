@@ -394,6 +394,14 @@ shop's own photographs, a kalamkari found the shop's kalamkari, a bandhani the
 shop's bandhanis, and a tissue the shop's tissue. It is a guide, drawn from
 your own sales, not a promise: a saree unlike anything you stock says so.
 
+## Suggested codes: match or not
+
+When a tag photograph has suggested codes (an *Ambiguous* card), pressing one no
+longer links it straight away. It opens the photograph beside the close-up of
+that code, with the design's other photographs to flick through, its seller,
+stock and % sales. **Match** links it; **Not a match** takes that suggestion away
+for good, so it is not offered for that photograph again.
+
 ## Labels and All photos
 
 **Labels** holds the tag photographs that have a design code, in three parts:

@@ -10,7 +10,7 @@
   var thumbByDesign = {};     // designKey -> photo id, for the Saree column
   var filter = { q: '', seller: '', cat: '', status: '', sort: 'sold', dir: -1, photo: false };
   var linesRows = [], linesPhoto = 0;
-  var BUILD = '2026-11-16c';   // shown in the footer, so you can tell what is live
+  var BUILD = '2026-11-16d';   // shown in the footer, so you can tell what is live
   var sellerNames = [];        // every seller in the workbook, for reading batch captions
   var picsByDesign = {};       // designKey -> photo ids, the picture of the goods first
   var photoUrls = {};
@@ -895,6 +895,71 @@
     });
   }
 
+  /* Before a suggested code is given to a photograph: the photograph beside
+     the close-up of that code (and its other photographs), with the design's
+     seller and stock, and two answers. Match links it; Not a match takes the
+     suggestion away for good, so it is not offered again. */
+  var cmpDlg = null;
+  function compareCode(id, code) {
+    var p = photoById(id), key = Compute.normKey(code);
+    if (!p || !validCodes[key]) return;
+    var ref = (state.refs || {})[key] || code, l = A && A.lines.filter(function (x) { return x.key === key; })[0];
+    var face = (p.linkCands || []).filter(function (x) { return Compute.normKey(x.code) === key; })[0];
+    var others = (picsByDesign[key] || []).filter(function (x) { return x !== p.id; });
+    var first = face ? face.id : others[0];
+    var pics = (face ? [face.id] : []).concat(others.filter(function (x) { return !face || x !== face.id; })).slice(0, 8);
+    if (!cmpDlg) {
+      cmpDlg = document.createElement('dialog');
+      cmpDlg.className = 'cmp';
+      document.body.appendChild(cmpDlg);
+      cmpDlg.addEventListener('click', function (e) {
+        if (e.target === cmpDlg) cmpDlg.close();                       // outside the box
+        var th = e.target.closest && e.target.closest('[data-cmp-pic]');
+        if (th) {
+          var big = cmpDlg.querySelector('.cmp-them img');
+          big.removeAttribute('data-h'); big.dataset.pid = th.dataset.cmpPic; big.removeAttribute('src');
+          cmpDlg.querySelectorAll('[data-cmp-pic]').forEach(function (x) { x.classList.toggle('on', x === th); });
+          hydrate(cmpDlg);
+        }
+      });
+    }
+    cmpDlg.innerHTML =
+      '<div class="dlg-head"><h2>Same saree as ' + esc(ref) + '?</h2>' +
+        '<button class="x" type="button" data-cmp="close" aria-label="Close">&times;</button></div>' +
+      '<div class="cmp-body">' +
+        '<figure class="cmp-me"><figcaption>This photograph' + (sentDay(p) ? ' &middot; uploaded ' + sentDay(p) : '') + '</figcaption>' +
+          '<span class="pic"><img data-pid="' + esc(p.id) + '" alt="This photograph"></span></figure>' +
+        '<figure class="cmp-them"><figcaption>' + esc(ref) + (l ? ' &middot; ' + esc(l.seller || 'seller not mapped') + ' &middot; ' +
+            n(l.bal) + ' on hand &middot; ' + pct(l.pctSold) + ' sales' : '') + '</figcaption>' +
+          (first ? '<span class="pic"><img data-pid="' + esc(first) + '" alt="' + esc(ref) + '"></span>'
+                 : '<p class="muted cmp-none">No photograph of ' + esc(ref) + ' yet to compare with.</p>') +
+          (pics.length > 1 ? '<div class="cmp-strip">' + pics.map(function (x, i) {
+            return '<button type="button" class="' + (i === 0 ? 'on' : '') + '" data-cmp-pic="' + esc(x) + '"><span class="pic"><img data-pid="' + esc(x) + '" alt=""></span></button>';
+          }).join('') + '</div>' : '') +
+        '</figure>' +
+      '</div>' +
+      '<div class="dlg-foot cmp-foot">' +
+        '<button type="button" class="iconbtn cmp-no" data-cmp="no">&#10005; Not a match</button>' +
+        '<button type="button" class="btn-primary cmp-yes" data-cmp="yes">&#10003; Match &mdash; link to ' + esc(ref) + '</button>' +
+      '</div>';
+    cmpDlg.querySelector('[data-cmp="close"]').onclick = function () { cmpDlg.close(); };
+    cmpDlg.querySelector('[data-cmp="yes"]').onclick = function () {
+      cmpDlg.close(); assign(id, code);
+      status(p.name + ' linked to ' + ref + '.', 'ok');
+    };
+    cmpDlg.querySelector('[data-cmp="no"]').onclick = function () {
+      cmpDlg.close();
+      // never suggested for this photograph again
+      if (window.Pieces) Pieces.reject(p, key);
+      p.candidates = (p.candidates || []).filter(function (c) { return Compute.normKey(c) !== key; });
+      if (p.linkCands) p.linkCands = p.linkCands.filter(function (x) { return Compute.normKey(x.code) !== key; });
+      Store.backend.save(state).then(function () { renderPhotos(); });
+      status(ref + ' is no longer suggested for ' + p.name + '.', 'ok');
+    };
+    hydrate(cmpDlg);
+    cmpDlg.showModal();
+  }
+
   function assign(id, code) {
     var p = photoById(id); if (!p) return;
     var key = Compute.normKey(code);
@@ -968,8 +1033,9 @@
   }
 
   function wirePhotoCards() {
+    // a suggested code is shown side by side first, to say match or not
     document.querySelectorAll('[data-use]').forEach(function (b) {
-      b.addEventListener('click', function () { assign(b.dataset.use, b.dataset.code); });
+      b.addEventListener('click', function () { compareCode(b.dataset.use, b.dataset.code); });
     });
     document.querySelectorAll('[data-unlink]').forEach(function (b) {
       b.addEventListener('click', function () { unassign(b.dataset.unlink); });
